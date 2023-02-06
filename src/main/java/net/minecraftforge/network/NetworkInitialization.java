@@ -5,6 +5,15 @@
 
 package net.minecraftforge.network;
 
+import net.minecraftforge.network.HandshakeMessages.C2SAcknowledge;
+import net.minecraftforge.network.HandshakeMessages.C2SModListReply;
+import net.minecraftforge.network.HandshakeMessages.S2CChannelMismatchData;
+import net.minecraftforge.network.HandshakeMessages.S2CConfigData;
+import net.minecraftforge.network.HandshakeMessages.S2CModData;
+import net.minecraftforge.network.HandshakeMessages.S2CModList;
+import net.minecraftforge.network.HandshakeMessages.S2CRegistry;
+import net.minecraftforge.network.PlayMessages.OpenContainer;
+import net.minecraftforge.network.PlayMessages.SpawnEntity;
 import net.minecraftforge.network.event.EventNetworkChannel;
 import net.minecraftforge.network.simple.SimpleChannel;
 import net.minecraftforge.registries.RegistryManager;
@@ -12,111 +21,120 @@ import net.minecraftforge.registries.RegistryManager;
 import java.util.Arrays;
 import java.util.List;
 
+import org.jetbrains.annotations.ApiStatus;
+
+import static net.minecraftforge.network.NetworkConstants.NETVERSION;
+import static net.minecraftforge.network.NetworkConstants.FML_HANDSHAKE_RESOURCE;
+import static net.minecraftforge.network.NetworkConstants.FML_HANDSHAKE_HANDLER;
+import static net.minecraftforge.network.NetworkConstants.FML_PLAY_RESOURCE;
+import static net.minecraftforge.network.NetworkConstants.MC_REGISTER_RESOURCE;
+import static net.minecraftforge.network.NetworkConstants.MC_UNREGISTER_RESOURCE;
+import static net.minecraftforge.network.NetworkDirection.LOGIN_TO_SERVER;
+import static net.minecraftforge.network.NetworkDirection.LOGIN_TO_CLIENT;
+
+@ApiStatus.Internal
 class NetworkInitialization {
-
     public static SimpleChannel getHandshakeChannel() {
-        SimpleChannel handshakeChannel = NetworkRegistry.ChannelBuilder.
-                named(NetworkConstants.FML_HANDSHAKE_RESOURCE).
-                clientAcceptedVersions(a -> true).
-                serverAcceptedVersions(a -> true).
-                networkProtocolVersion(() -> NetworkConstants.NETVERSION).
-                simpleChannel();
+        var channel = NetworkRegistry.ChannelBuilder
+            .named(FML_HANDSHAKE_RESOURCE)
+            .anyVersion()
+            .networkProtocolVersion(NETVERSION)
+            .attribute(FML_HANDSHAKE_HANDLER, HandshakeHandler::new)
+            .simpleChannel();
 
-        handshakeChannel.messageBuilder(HandshakeMessages.C2SAcknowledge.class, 99, NetworkDirection.LOGIN_TO_SERVER).
-                loginIndex(HandshakeMessages.LoginIndexedMessage::getLoginIndex, HandshakeMessages.LoginIndexedMessage::setLoginIndex).
-                decoder(HandshakeMessages.C2SAcknowledge::decode).
-                encoder(HandshakeMessages.C2SAcknowledge::encode).
-                consumerNetworkThread(HandshakeHandler.indexFirst(HandshakeHandler::handleClientAck)).
-                add();
+        channel.messageBuilder(C2SAcknowledge.class, 99, LOGIN_TO_SERVER)
+            .decoder(C2SAcknowledge::decode)
+            .encoder(C2SAcknowledge::encode)
+            .context(FML_HANDSHAKE_HANDLER)
+            .consumerNetworkThread(HandshakeHandler::handleClientAck)
+            .add();
 
-        handshakeChannel.messageBuilder(HandshakeMessages.S2CModData.class, 5, NetworkDirection.LOGIN_TO_CLIENT).
-                loginIndex(HandshakeMessages.LoginIndexedMessage::getLoginIndex, HandshakeMessages.LoginIndexedMessage::setLoginIndex).
-                decoder(HandshakeMessages.S2CModData::decode).
-                encoder(HandshakeMessages.S2CModData::encode).
-                markAsLoginPacket().
-                noResponse().
-                consumerNetworkThread(HandshakeHandler.biConsumerFor(HandshakeHandler::handleModData)).
-                add();
+        channel.messageBuilder(S2CModData.class, 5, LOGIN_TO_CLIENT)
+            .decoder(S2CModData::decode)
+            .encoder(S2CModData::encode)
+            .markAsLoginPacket()
+            .noResponse()
+            .context(FML_HANDSHAKE_HANDLER)
+            .consumerNetworkThread(HandshakeHandler::handleModData)
+            .add();
 
-        handshakeChannel.messageBuilder(HandshakeMessages.S2CModList.class, 1, NetworkDirection.LOGIN_TO_CLIENT).
-                loginIndex(HandshakeMessages.LoginIndexedMessage::getLoginIndex, HandshakeMessages.LoginIndexedMessage::setLoginIndex).
-                decoder(HandshakeMessages.S2CModList::decode).
-                encoder(HandshakeMessages.S2CModList::encode).
-                markAsLoginPacket().
-                consumerNetworkThread(HandshakeHandler.biConsumerFor(HandshakeHandler::handleServerModListOnClient)).
-                add();
+        channel.messageBuilder(S2CModList.class, 1, LOGIN_TO_CLIENT)
+            .decoder(S2CModList::decode)
+            .encoder(S2CModList::encode)
+            .markAsLoginPacket()
+            .context(FML_HANDSHAKE_HANDLER)
+            .consumerNetworkThread(HandshakeHandler::handleServerModListOnClient)
+            .add();
 
-        handshakeChannel.messageBuilder(HandshakeMessages.C2SModListReply.class, 2, NetworkDirection.LOGIN_TO_SERVER).
-                loginIndex(HandshakeMessages.LoginIndexedMessage::getLoginIndex, HandshakeMessages.LoginIndexedMessage::setLoginIndex).
-                decoder(HandshakeMessages.C2SModListReply::decode).
-                encoder(HandshakeMessages.C2SModListReply::encode).
-                consumerNetworkThread(HandshakeHandler.indexFirst(HandshakeHandler::handleClientModListOnServer)).
-                add();
+        channel.messageBuilder(C2SModListReply.class, 2, LOGIN_TO_SERVER)
+            .decoder(C2SModListReply::decode)
+            .encoder(C2SModListReply::encode)
+            .context(FML_HANDSHAKE_HANDLER)
+            .consumerNetworkThread(HandshakeHandler::handleClientModListOnServer)
+            .add();
 
-        handshakeChannel.messageBuilder(HandshakeMessages.S2CRegistry.class, 3, NetworkDirection.LOGIN_TO_CLIENT).
-                loginIndex(HandshakeMessages.LoginIndexedMessage::getLoginIndex, HandshakeMessages.LoginIndexedMessage::setLoginIndex).
-                decoder(HandshakeMessages.S2CRegistry::decode).
-                encoder(HandshakeMessages.S2CRegistry::encode).
-                buildLoginPacketList(RegistryManager::generateRegistryPackets). //TODO: Make this non-static, and store a cache on the client.
-                consumerNetworkThread(HandshakeHandler.biConsumerFor(HandshakeHandler::handleRegistryMessage)).
-                add();
+        channel.messageBuilder(S2CRegistry.class, 3, LOGIN_TO_CLIENT)
+            .decoder(S2CRegistry::decode)
+            .encoder(S2CRegistry::encode)
+            .buildLoginPacketList(RegistryManager::generateRegistryPackets) //TODO: Make this non-static, and store a cache on the client.
+            .context(FML_HANDSHAKE_HANDLER)
+            .consumerNetworkThread(HandshakeHandler::handleRegistryMessage)
+            .add();
 
-        handshakeChannel.messageBuilder(HandshakeMessages.S2CConfigData.class, 4, NetworkDirection.LOGIN_TO_CLIENT).
-                loginIndex(HandshakeMessages.LoginIndexedMessage::getLoginIndex, HandshakeMessages.LoginIndexedMessage::setLoginIndex).
-                decoder(HandshakeMessages.S2CConfigData::decode).
-                encoder(HandshakeMessages.S2CConfigData::encode).
-                buildLoginPacketList(ConfigSync.INSTANCE::syncConfigs).
-                consumerNetworkThread(HandshakeHandler.biConsumerFor(HandshakeHandler::handleConfigSync)).
-                add();
+        channel.messageBuilder(S2CConfigData.class, 4, LOGIN_TO_CLIENT)
+            .decoder(S2CConfigData::decode)
+            .encoder(S2CConfigData::encode)
+            .buildLoginPacketList(ConfigSync.INSTANCE::syncConfigs)
+            .context(FML_HANDSHAKE_HANDLER)
+            .consumerNetworkThread(HandshakeHandler::handleConfigSync)
+            .add();
 
-        handshakeChannel.messageBuilder(HandshakeMessages.S2CChannelMismatchData.class, 6, NetworkDirection.LOGIN_TO_CLIENT).
-                loginIndex(HandshakeMessages.LoginIndexedMessage::getLoginIndex, HandshakeMessages.LoginIndexedMessage::setLoginIndex).
-                decoder(HandshakeMessages.S2CChannelMismatchData::decode).
-                encoder(HandshakeMessages.S2CChannelMismatchData::encode).
-                consumerNetworkThread(HandshakeHandler.biConsumerFor(HandshakeHandler::handleModMismatchData)).
-                add();
+        channel.messageBuilder(S2CChannelMismatchData.class, 6, LOGIN_TO_CLIENT)
+            .decoder(S2CChannelMismatchData::decode)
+            .encoder(S2CChannelMismatchData::encode)
+            .context(FML_HANDSHAKE_HANDLER)
+            .consumerNetworkThread(HandshakeHandler::handleModMismatchData)
+            .add();
 
-        return handshakeChannel;
+        return channel;
     }
 
     public static SimpleChannel getPlayChannel() {
-         SimpleChannel playChannel = NetworkRegistry.ChannelBuilder.
-                named(NetworkConstants.FML_PLAY_RESOURCE).
-                clientAcceptedVersions(a -> true).
-                serverAcceptedVersions(a -> true).
-                networkProtocolVersion(() -> NetworkConstants.NETVERSION).
-                simpleChannel();
+         var channel = NetworkRegistry.ChannelBuilder
+            .named(FML_PLAY_RESOURCE)
+            .anyVersion()
+            .networkProtocolVersion(NETVERSION)
+            .simpleChannel();
 
-        playChannel.messageBuilder(PlayMessages.SpawnEntity.class, 0).
-                decoder(PlayMessages.SpawnEntity::decode).
-                encoder(PlayMessages.SpawnEntity::encode).
-                consumerNetworkThread(PlayMessages.SpawnEntity::handle).
-                add();
+        channel.messageBuilder(SpawnEntity.class, 0)
+            .decoder(SpawnEntity::decode)
+            .encoder(SpawnEntity::encode)
+            .consumerNetworkThread(SpawnEntity::handle)
+            .add();
 
-        playChannel.messageBuilder(PlayMessages.OpenContainer.class,1).
-                decoder(PlayMessages.OpenContainer::decode).
-                encoder(PlayMessages.OpenContainer::encode).
-                consumerNetworkThread(PlayMessages.OpenContainer::handle).
-                add();
+        channel.messageBuilder(OpenContainer.class, 1)
+            .decoder(OpenContainer::decode)
+            .encoder(OpenContainer::encode)
+            .consumerNetworkThread(OpenContainer::handle)
+            .add();
 
-        return playChannel;
+        return channel;
     }
 
     public static List<EventNetworkChannel> buildMCRegistrationChannels() {
-        final EventNetworkChannel mcRegChannel = NetworkRegistry.ChannelBuilder.
-                named(NetworkConstants.MC_REGISTER_RESOURCE).
-                clientAcceptedVersions(a -> true).
-                serverAcceptedVersions(a -> true).
-                networkProtocolVersion(() -> NetworkConstants.NETVERSION).
-                eventNetworkChannel();
-        mcRegChannel.addListener(MCRegisterPacketHandler.INSTANCE::registerListener);
-        final EventNetworkChannel mcUnregChannel = NetworkRegistry.ChannelBuilder.
-                named(NetworkConstants.MC_UNREGISTER_RESOURCE).
-                clientAcceptedVersions(a -> true).
-                serverAcceptedVersions(a -> true).
-                networkProtocolVersion(() -> NetworkConstants.NETVERSION).
-                eventNetworkChannel();
-        mcUnregChannel.addListener(MCRegisterPacketHandler.INSTANCE::unregisterListener);
-        return Arrays.asList(mcRegChannel, mcUnregChannel);
+        var regChannel = NetworkRegistry.ChannelBuilder
+            .named(MC_REGISTER_RESOURCE)
+            .anyVersion()
+            .networkProtocolVersion(NETVERSION)
+            .eventNetworkChannel();
+        regChannel.addListener(MCRegisterPacketHandler::registerListener);
+
+        var unregChannel = NetworkRegistry.ChannelBuilder
+            .named(MC_UNREGISTER_RESOURCE)
+            .anyVersion()
+            .networkProtocolVersion(NETVERSION)
+            .eventNetworkChannel();
+        unregChannel.addListener(MCRegisterPacketHandler::unregisterListener);
+        return Arrays.asList(regChannel, unregChannel);
     }
 }

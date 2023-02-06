@@ -47,8 +47,11 @@ public class VanillaPacketSplitter
 
     public static void register()
     {
-        Predicate<String> versionCheck = NetworkRegistry.acceptMissingOr(VERSION);
-        EventNetworkChannel channel = NetworkRegistry.newEventChannel(CHANNEL, () -> VERSION, versionCheck, versionCheck);
+        var channel = NetworkRegistry.ChannelBuilder
+            .named(CHANNEL)
+            .networkProtocolVersion(() -> VERSION)
+            .exactVersionOrMissing()
+            .eventNetworkChannel();
         channel.addListener(VanillaPacketSplitter::onClientPacket);
     }
 

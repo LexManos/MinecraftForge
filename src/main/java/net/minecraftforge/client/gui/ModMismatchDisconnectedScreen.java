@@ -39,8 +39,8 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraftforge.common.ForgeI18n;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraftforge.network.ConnectionData.ModData;
 import net.minecraftforge.network.ConnectionData.ModMismatchData;
-import net.minecraftforge.network.NetworkRegistry;
 
 public class ModMismatchDisconnectedScreen extends Screen
 {
@@ -52,7 +52,7 @@ public class ModMismatchDisconnectedScreen extends Screen
     private final Path modsDir;
     private final Path logFile;
     private final int listHeight;
-    private final Map<ResourceLocation, Pair<String, String>> presentModData;
+    private final Map<ResourceLocation, ModData> presentModData;
     private final List<ResourceLocation> missingModData;
     private final Map<ResourceLocation, String> mismatchedModData;
     private final List<String> allModIds;
@@ -70,8 +70,8 @@ public class ModMismatchDisconnectedScreen extends Screen
         this.listHeight = modMismatchData.containsMismatches() ? 140 : 0;
         this.mismatchedDataFromServer = modMismatchData.mismatchedDataFromServer();
         this.presentModData = modMismatchData.presentModData();
-        this.missingModData = modMismatchData.mismatchedModData().entrySet().stream().filter(e -> e.getValue().equals(NetworkRegistry.ABSENT)).map(Entry::getKey).collect(Collectors.toList());
-        this.mismatchedModData = modMismatchData.mismatchedModData().entrySet().stream().filter(e -> !e.getValue().equals(NetworkRegistry.ABSENT)).collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+        this.missingModData = modMismatchData.mismatchedModData().entrySet().stream().filter(e -> e.getValue() == null).map(Entry::getKey).collect(Collectors.toList());
+        this.mismatchedModData = modMismatchData.mismatchedModData().entrySet().stream().filter(e -> e.getValue() != null).collect(Collectors.toMap(Entry::getKey, Entry::getValue));
         this.allModIds = presentModData.keySet().stream().map(ResourceLocation::getNamespace).distinct().collect(Collectors.toList());
         this.presentModUrls = ModList.get().getMods().stream().filter(info -> allModIds.contains(info.getModId())).map(info -> Pair.of(info.getModId(), (String)info.getConfig().getConfigElement("displayURL").orElse(""))).collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
     }
@@ -134,7 +134,7 @@ public class ModMismatchDisconnectedScreen extends Screen
                 rawTable.add(Pair.of(Component.literal(ForgeI18n.parseMessage("fml.modmismatchscreen.table.modname")).withStyle(ChatFormatting.UNDERLINE), Pair.of("", ForgeI18n.parseMessage(mismatchedDataFromServer ? "fml.modmismatchscreen.table.youhave" : "fml.modmismatchscreen.table.youneed"))));
                 int i = 0;
                 for (ResourceLocation mod : missingModData) {
-                    rawTable.add(Pair.of(toModNameComponent(mod, presentModData.get(mod).getLeft(), i), Pair.of("", presentModData.getOrDefault(mod, Pair.of("", "")).getRight())));
+                    rawTable.add(Pair.of(toModNameComponent(mod, presentModData.get(mod).displayName(), i), Pair.of("", presentModData.getOrDefault(mod, new ModData("", "")).version())));
                     if (++i >= 10) {
                         //If too many missing mod entries are present, append a line referencing how to see the full list and stop rendering any more entries
                         rawTable.add(Pair.of(Component.literal(ForgeI18n.parseMessage("fml.modmismatchscreen.additional", missingModData.size() - i)).withStyle(ChatFormatting.ITALIC), Pair.of("", "")));
@@ -151,7 +151,7 @@ public class ModMismatchDisconnectedScreen extends Screen
                 rawTable.add(Pair.of(Component.literal(ForgeI18n.parseMessage("fml.modmismatchscreen.table.modname")).withStyle(ChatFormatting.UNDERLINE), Pair.of(ForgeI18n.parseMessage(mismatchedDataFromServer ? "fml.modmismatchscreen.table.youhave" : "fml.modmismatchscreen.table.serverhas"), ForgeI18n.parseMessage(mismatchedDataFromServer ? "fml.modmismatchscreen.table.serverhas" : "fml.modmismatchscreen.table.youhave"))));
                 int i = 0;
                 for (Map.Entry<ResourceLocation,  String> modData : mismatchedModData.entrySet()) {
-                    rawTable.add(Pair.of(toModNameComponent(modData.getKey(), presentModData.get(modData.getKey()).getLeft(), i), Pair.of(presentModData.getOrDefault(modData.getKey(), Pair.of("", "")).getRight(), modData.getValue())));
+                    rawTable.add(Pair.of(toModNameComponent(modData.getKey(), presentModData.get(modData.getKey()).displayName(), i), Pair.of(presentModData.getOrDefault(modData.getKey(), new ModData("", "")).version(), modData.getValue())));
                     if (++i >= 10) {
                         //If too many mismatched mod entries are present, append a line referencing how to see the full list and stop rendering any more entries
                         rawTable.add(Pair.of(Component.literal(ForgeI18n.parseMessage("fml.modmismatchscreen.additional", mismatchedModData.size() - i)).withStyle(ChatFormatting.ITALIC), Pair.of("", "")));

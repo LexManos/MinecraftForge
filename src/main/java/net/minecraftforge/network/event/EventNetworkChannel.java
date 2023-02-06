@@ -22,7 +22,6 @@ import java.util.function.Supplier;
  * {@link NetworkEvent.Context#enqueueWork(Runnable)} can be used to handle the message on the main server or client
  * thread.
  *
- * @see NetworkRegistry#newEventChannel(ResourceLocation, Supplier, Predicate, Predicate)
  * @see NetworkRegistry.ChannelBuilder#newEventChannel(ResourceLocation, Supplier, Predicate, Predicate)
  */
 public class EventNetworkChannel

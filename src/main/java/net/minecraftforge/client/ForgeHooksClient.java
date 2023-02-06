@@ -156,7 +156,6 @@ import net.minecraftforge.network.NetworkConstants;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.registries.GameData;
 import net.minecraftforge.versions.forge.ForgeVersion;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
@@ -820,11 +819,10 @@ public class ForgeHooksClient
     {
         if (packet.getForgeData() != null) {
             final Map<String, String> mods = packet.getForgeData().getRemoteModData();
-            final Map<ResourceLocation, Pair<String, Boolean>> remoteChannels = packet.getForgeData().getRemoteChannels();
             final int fmlver = packet.getForgeData().getFMLNetworkVersion();
 
             boolean fmlNetMatches = fmlver == NetworkConstants.FMLNETVERSION;
-            boolean channelsMatch = NetworkRegistry.checkListPingCompatibilityForClient(remoteChannels);
+            boolean channelsMatch = packet.getForgeData().areNetworksCompatible();
             AtomicBoolean result = new AtomicBoolean(true);
             final List<String> extraClientMods = new ArrayList<>();
             ModList.get().forEachModContainer((modid, mc) ->

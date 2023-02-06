@@ -146,8 +146,7 @@ public class ServerLifecycleHooks
     private static AtomicBoolean allowLogins = new AtomicBoolean(false);
 
     public static boolean handleServerLogin(final ClientIntentionPacket packet, final Connection manager) {
-        if (!allowLogins.get())
-        {
+        if (!allowLogins.get()) {
             MutableComponent text = Component.literal("Server is still starting! Please wait before reconnecting.");
             LOGGER.info(SERVERHOOKS,"Disconnecting Player (server is still starting): {}", text.getContents());
             manager.send(new ClientboundLoginDisconnectPacket(text));
@@ -160,7 +159,7 @@ public class ServerLifecycleHooks
             final int versionNumber = connectionType.getFMLVersionNumber(packet.getFMLVersion());
 
             if (connectionType == ConnectionType.MODDED && versionNumber != NetworkConstants.FMLNETVERSION) {
-                rejectConnection(manager, connectionType, "This modded server is not impl compatible with your modded client. Please verify your Forge version closely matches the server. Got net version " + versionNumber + " this server is net version " + NetworkConstants.FMLNETVERSION);
+                rejectConnection(manager, connectionType, "This modded server is not compatible with your modded client. Please verify your Forge version closely matches the server. Got net version " + versionNumber + " this server is net version " + NetworkConstants.FMLNETVERSION);
                 return false;
             }
 

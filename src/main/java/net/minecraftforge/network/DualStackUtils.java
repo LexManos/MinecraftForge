@@ -11,14 +11,16 @@ import net.minecraft.client.multiplayer.resolver.ServerNameResolver;
 import net.minecraft.util.HttpUtil;
 
 import javax.annotation.Nullable;
+
+import org.jetbrains.annotations.ApiStatus;
+
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
-import java.util.Optional;
 
-public class DualStackUtils
-{
+@ApiStatus.Internal
+public class DualStackUtils {
     /**
      * Resolve the address and see if Java and the OS return an IPv6 or IPv4 one, then let Netty know
      * accordingly (it doesn't understand the {@code java.net.preferIPv6Addresses=system} property).
@@ -26,15 +28,12 @@ public class DualStackUtils
      * @param hostAddress The address you want to check
      * @return true if IPv6, false if IPv4
      */
-    public static boolean checkIPv6(final String hostAddress)
-    {
-        final Optional<InetSocketAddress> hostAddr =
-                ServerNameResolver.DEFAULT
-                        .resolveAddress(ServerAddress.parseString(hostAddress))
-                        .map(ResolvedServerAddress::asInetSocketAddress);
+    public static boolean checkIPv6(final String hostAddress) {
+        var hostAddr = ServerNameResolver.DEFAULT
+            .resolveAddress(ServerAddress.parseString(hostAddress))
+            .map(ResolvedServerAddress::asInetSocketAddress);
 
-        if (hostAddr.isPresent()) return checkIPv6(hostAddr.get().getAddress());
-        else return false;
+        return hostAddr.isPresent() ? checkIPv6(hostAddr.get().getAddress()) : false;
     }
 
     /**
@@ -43,16 +42,12 @@ public class DualStackUtils
      * @param inetAddress The address you want to check
      * @return true if IPv6, false if IPv4
      */
-    public static boolean checkIPv6(final InetAddress inetAddress)
-    {
-        if (inetAddress instanceof Inet6Address)
-        {
+    public static boolean checkIPv6(final InetAddress inetAddress) {
+        if (inetAddress instanceof Inet6Address) {
             System.setProperty("java.net.preferIPv4Stack", "false");
             System.setProperty("java.net.preferIPv6Addresses", "true");
             return true;
-        }
-        else
-        {
+        } else {
             System.setProperty("java.net.preferIPv4Stack", "true");
             System.setProperty("java.net.preferIPv6Addresses", "false");
             return false;
@@ -66,23 +61,18 @@ public class DualStackUtils
      * @return the client's local IP address or {@code null} if unable to determine it
      */
     @Nullable
-    public static InetAddress getLocalAddress()
-    {
+    public static InetAddress getLocalAddress() {
         final InetAddress localAddr = new InetSocketAddress(HttpUtil.getAvailablePort()).getAddress();
         if (localAddr.isAnyLocalAddress()) return localAddr;
 
-        try
-        {
+        try {
             return InetAddress.getByName("localhost");
-        }
-        catch (final UnknownHostException e)
-        {
+        } catch (final UnknownHostException e) {
             return null;
         }
     }
 
     public static String getMulticastGroup() {
-        if (checkIPv6(getLocalAddress())) return "FF75:230::60";
-        else return "224.0.2.60";
+        return checkIPv6(getLocalAddress()) ? "FF75:230::60" : "224.0.2.60";
     }
 }

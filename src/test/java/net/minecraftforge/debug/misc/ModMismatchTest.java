@@ -50,7 +50,11 @@ public class ModMismatchTest
         {
             if ((FMLEnvironment.dist == Dist.DEDICATED_SERVER && REGISTER_FOR_SERVER) || (FMLEnvironment.dist == Dist.CLIENT && REGISTER_FOR_CLIENT))
             {
-                NetworkRegistry.newSimpleChannel(new ResourceLocation(MOD_ID, "channel"), () -> CHANNEL_PROTOCOL_VERSION, p -> p.equals(CHANNEL_PROTOCOL_VERSION), (p) -> p.equals(CHANNEL_PROTOCOL_VERSION));
+                NetworkRegistry.ChannelBuilder
+                    .named(new ResourceLocation(MOD_ID, "channel"))
+                    .networkProtocolVersion(() -> CHANNEL_PROTOCOL_VERSION)
+                    .exactVersionOnly()
+                    .simpleChannel();
             }
             if (REGISTER_REGISTRY_ENTRY && FMLEnvironment.dist == Dist.DEDICATED_SERVER)
             {

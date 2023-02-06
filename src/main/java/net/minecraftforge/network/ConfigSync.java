@@ -39,7 +39,7 @@ public class ConfigSync {
 
     public void receiveSyncedConfig(final HandshakeMessages.S2CConfigData s2CConfigData, final Supplier<NetworkEvent.Context> contextSupplier) {
         if (!Minecraft.getInstance().isLocalServer()) {
-            Optional.ofNullable(tracker.fileMap().get(s2CConfigData.getFileName())).ifPresent(mc-> mc.acceptSyncedConfig(s2CConfigData.getBytes()));
+            Optional.ofNullable(tracker.fileMap().get(s2CConfigData.fileName())).ifPresent(mc-> mc.acceptSyncedConfig(s2CConfigData.data()));
         }
     }
 }

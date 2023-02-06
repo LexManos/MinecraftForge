@@ -12,21 +12,20 @@ import net.minecraftforge.network.event.EventNetworkChannel;
 import net.minecraftforge.network.simple.SimpleChannel;
 import net.minecraftforge.registries.DataPackRegistriesHooks;
 
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
+import org.jetbrains.annotations.ApiStatus;
 
-import java.util.ArrayList;
+import io.netty.util.AttributeKey;
+
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.HashSet;
-import java.util.function.BiFunction;
+import java.util.function.BiPredicate;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -34,51 +33,19 @@ import java.util.stream.Collectors;
 /**
  * The impl registry. Tracks channels on behalf of mods.
  */
-public class NetworkRegistry
-{
+public class NetworkRegistry {
     private static final Logger LOGGER = LogManager.getLogger();
-    private static final Marker NETREGISTRY = MarkerManager.getMarker("NETREGISTRY");
+    static final Marker NETREGISTRY = MarkerManager.getMarker("NETREGISTRY");
 
     private static Map<ResourceLocation, NetworkInstance> instances = Collections.synchronizedMap(new HashMap<>());
+    private static Map<ResourceLocation, NetworkInstance> instancesView = Collections.unmodifiableMap(instances);
 
-    /**
-     * Special value for clientAcceptedVersions and serverAcceptedVersions predicates indicating the other side lacks
-     * this channel.
-     */
-    @SuppressWarnings("RedundantStringConstructorCall")
-    public static String ABSENT = new String("ABSENT \uD83E\uDD14");
-
-    @SuppressWarnings("RedundantStringConstructorCall")
-    public static String ACCEPTVANILLA  = new String("ALLOWVANILLA \uD83D\uDC93\uD83D\uDC93\uD83D\uDC93");
-
-    /**
-     * Makes a version predicate that accepts connections to vanilla or without the channel.
-     * @param protocolVersion The protocol version, which will be matched exactly.
-     * @return A new predicate with the new conditions.
-     */
-    public static Predicate<String> acceptMissingOr(final String protocolVersion)
-    {
-        return acceptMissingOr(protocolVersion::equals);
+    public static List<String> getServerNonVanillaNetworkMods() {
+        return listRejectedVanillaMods(false);
     }
 
-    /**
-     * Makes a version predicate that accepts connections to vanilla or without the channel.
-     * @param versionCheck The main version predicate, which should check the version number of the protocol.
-     * @return A new predicate with the new conditions.
-     */
-    public static Predicate<String> acceptMissingOr(Predicate<String> versionCheck)
-    {
-        return versionCheck.or(ABSENT::equals).or(ACCEPTVANILLA::equals);
-    }
-
-    public static List<String> getServerNonVanillaNetworkMods()
-    {
-        return listRejectedVanillaMods(NetworkInstance::tryClientVersionOnServer);
-    }
-
-    public static List<String> getClientNonVanillaNetworkMods()
-    {
-        return listRejectedVanillaMods(NetworkInstance::tryServerVersionOnClient);
+    public static List<String> getClientNonVanillaNetworkMods() {
+        return listRejectedVanillaMods(true);
     }
 
     public static boolean acceptsVanillaClientConnections() {
@@ -89,58 +56,34 @@ public class NetworkRegistry
         return instances.isEmpty() || getClientNonVanillaNetworkMods().isEmpty();
     }
 
-
-    /**
-     * Create a new {@link SimpleChannel}.
-     *
-     * @param name The registry name for this channel. Must be unique
-     * @param networkProtocolVersion The impl protocol version string that will be offered to the remote side {@link ChannelBuilder#networkProtocolVersion(Supplier)}
-     * @param clientAcceptedVersions Called on the client with the networkProtocolVersion string from the server {@link ChannelBuilder#clientAcceptedVersions(Predicate)}
-     * @param serverAcceptedVersions Called on the server with the networkProtocolVersion string from the client {@link ChannelBuilder#serverAcceptedVersions(Predicate)}
-     * @return A new {@link SimpleChannel}
-     *
-     * @see ChannelBuilder#newSimpleChannel(ResourceLocation, Supplier, Predicate, Predicate)
-     */
-    public static SimpleChannel newSimpleChannel(final ResourceLocation name, Supplier<String> networkProtocolVersion, Predicate<String> clientAcceptedVersions, Predicate<String> serverAcceptedVersions) {
-        return new SimpleChannel(createInstance(name, networkProtocolVersion, clientAcceptedVersions, serverAcceptedVersions));
-    }
-
-    /**
-     * Create a new {@link EventNetworkChannel}.
-     *
-     * @param name The registry name for this channel. Must be unique
-     * @param networkProtocolVersion The impl protocol version string that will be offered to the remote side {@link ChannelBuilder#networkProtocolVersion(Supplier)}
-     * @param clientAcceptedVersions Called on the client with the networkProtocolVersion string from the server {@link ChannelBuilder#clientAcceptedVersions(Predicate)}
-     * @param serverAcceptedVersions Called on the server with the networkProtocolVersion string from the client {@link ChannelBuilder#serverAcceptedVersions(Predicate)}
-
-     * @return A new {@link EventNetworkChannel}
-     *
-     * @see ChannelBuilder#newEventChannel(ResourceLocation, Supplier, Predicate, Predicate)
-     */
-    public static EventNetworkChannel newEventChannel(final ResourceLocation name, Supplier<String> networkProtocolVersion, Predicate<String> clientAcceptedVersions, Predicate<String> serverAcceptedVersions) {
-        return new EventNetworkChannel(createInstance(name, networkProtocolVersion, clientAcceptedVersions, serverAcceptedVersions));
+    private static boolean lock = false;
+    @ApiStatus.Internal // Called by NETLOCK state. Prevents modders from creating more channels.
+    public static void lock() {
+        lock = true;
     }
 
     /**
      * Creates the internal {@link NetworkInstance} that tracks the channel data.
      * @param name registry name
      * @param networkProtocolVersion The protocol version string
-     * @param clientAcceptedVersions The client accepted predicate
-     * @param serverAcceptedVersions The server accepted predicate
+     * @param clientValidator The client accepted predicate
+     * @param serverValidator The server accepted predicate
      * @return The {@link NetworkInstance}
      * @throws IllegalArgumentException if the name already exists
      */
-    private static NetworkInstance createInstance(ResourceLocation name, Supplier<String> networkProtocolVersion, Predicate<String> clientAcceptedVersions, Predicate<String> serverAcceptedVersions)
-    {
-        if(lock) {
+    private static NetworkInstance createInstance(ResourceLocation name, Supplier<String> networkProtocolVersion,
+        BiPredicate<ConnectionType, String> clientValidator, BiPredicate<ConnectionType, String> serverValidator,
+        Map<AttributeKey<?>, AttributeFactory<?>> attributes
+    ) {
+        if (lock) {
             LOGGER.error(NETREGISTRY, "Attempted to register channel {} even though registry phase is over", name);
             throw new IllegalArgumentException("Registration of impl channels is locked");
         }
         if (instances.containsKey(name)) {
             LOGGER.error(NETREGISTRY, "NetworkDirection channel {} already registered.", name);
-            throw new IllegalArgumentException("NetworkDirection Channel {"+ name +"} already registered");
+            throw new IllegalArgumentException("NetworkDirection Channel {" + name + "} already registered");
         }
-        final NetworkInstance networkInstance = new NetworkInstance(name, networkProtocolVersion, clientAcceptedVersions, serverAcceptedVersions);
+        final NetworkInstance networkInstance = new NetworkInstance(name, networkProtocolVersion, clientValidator, serverValidator, attributes);
         instances.put(name, networkInstance);
         return networkInstance;
     }
@@ -148,270 +91,251 @@ public class NetworkRegistry
     /**
      * Find the {@link NetworkInstance}, if possible
      *
-     * @param resourceLocation The impl instance to lookup
+     * @param name The impl instance to lookup
      * @return The {@link Optional} {@link NetworkInstance}
      */
-    static Optional<NetworkInstance> findTarget(ResourceLocation resourceLocation)
-    {
-        return Optional.ofNullable(instances.get(resourceLocation));
+    static Optional<NetworkInstance> findTarget(ResourceLocation name) {
+        return Optional.ofNullable(instances.get(name));
     }
 
     /**
-     * Construct the Map representation of the channel list, for use during login handshaking
-     *
-     * @see HandshakeMessages.S2CModList
-     * @see HandshakeMessages.C2SModListReply
+     * A simple helper function to get the list of channels, and their protocol versions.
+     * Used in multiple places so kept during cleanup.
      */
-    static Map<ResourceLocation, String> buildChannelVersions() {
-        return instances.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getNetworkProtocolVersion()));
+    static Map<ResourceLocation, String> networkVersions() {
+        return networks().entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue().getNetworkProtocolVersion()));
     }
 
-    /**
-     * Construct the Map representation of the channel list, for the client to check against during list ping
-     *
-     * @see HandshakeMessages.S2CModList
-     * @see HandshakeMessages.C2SModListReply
-     */
-    static Map<ResourceLocation, Pair<String, Boolean>> buildChannelVersionsForListPing() {
-        return instances.entrySet().stream().
-                map( p -> Pair.of(p.getKey(), Pair.of(p.getValue().getNetworkProtocolVersion(), p.getValue().tryClientVersionOnServer(ABSENT)))).
-                filter(p -> !p.getLeft().getNamespace().equals("fml")).
-                collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
+    static Map<ResourceLocation, NetworkInstance> networks() {
+        return instancesView;
     }
 
-    static List<String> listRejectedVanillaMods(BiFunction<NetworkInstance, String, Boolean> testFunction) {
-        final List<Pair<ResourceLocation, Boolean>> results = instances.values().stream().
-                map(ni -> {
-                    final String incomingVersion = ACCEPTVANILLA;
-                    final boolean test = testFunction.apply(ni, incomingVersion);
-                    LOGGER.debug(NETREGISTRY, "Channel '{}' : Vanilla acceptance test: {}", ni.getChannelName(), test ? "ACCEPTED" : "REJECTED");
-                    return Pair.of(ni.getChannelName(), test);
-                }).filter(p->!p.getRight()).collect(Collectors.toList());
+    private static List<String> listRejectedVanillaMods(boolean testS2C) {
+        var rejected = instances.values().stream()
+            .filter(ni -> {
+                var accepted = testS2C ?
+                    ni.tryServerVersionOnClient(ConnectionType.VANILLA, null) :
+                    ni.tryClientVersionOnServer(ConnectionType.VANILLA, null);
 
-        if (!results.isEmpty()) {
-            LOGGER.error(NETREGISTRY, "Channels [{}] rejected vanilla connections",
-                    results.stream().map(Pair::getLeft).map(Object::toString).collect(Collectors.joining(",")));
-            return results.stream().map(Pair::getLeft).map(Object::toString).collect(Collectors.toList());
+                LOGGER.debug(NETREGISTRY, "Channel '{}' : Vanilla acceptance test: {}", ni.getChannelName(), accepted ? "ACCEPTED" : "REJECTED");
+                return !accepted;
+            })
+            .map(NetworkInstance::getChannelName)
+            .map(Object::toString)
+            .collect(Collectors.toList());
+
+        if (!rejected.isEmpty()) {
+            LOGGER.error(NETREGISTRY, "Channels [{}] rejected vanilla connections", rejected.stream().collect(Collectors.joining(",")));
+            return rejected.stream().collect(Collectors.toList());
         }
+
         LOGGER.debug(NETREGISTRY, "Accepting channel list from vanilla");
         return Collections.emptyList();
     }
-    /**
-     * Validate the channels from the server on the client. Tests the client predicates against the server
-     * supplied impl protocol version.
-     *
-     * @param channels An @{@link Map} of name->version pairs for testing
-     * @return a map of mismatched channel ids and versions, or an empty map if all channels accept themselves
-     */
-    static Map<ResourceLocation, String> validateClientChannels(final Map<ResourceLocation, String> channels) {
-        return validateChannels(channels, "server", NetworkInstance::tryServerVersionOnClient);
-    }
 
-    /**
-     * Validate the channels from the client on the server. Tests the server predicates against the client
-     * supplied impl protocol version.
-     * @param channels An @{@link Map} of name->version pairs for testing
-     * @return a map of mismatched channel ids and versions, or an empty map if all channels accept themselves
-     */
-    static Map<ResourceLocation, String> validateServerChannels(final Map<ResourceLocation, String> channels) {
-        return validateChannels(channels, "client", NetworkInstance::tryClientVersionOnServer);
-    }
+    record LoginPayload(FriendlyByteBuf data, ResourceLocation channelName, String messageContext, boolean needsResponse) {}
 
-    /**
-     * Tests if the map matches with the supplied predicate tester
-     *
-     * @param incoming An @{@link Map} of name->version pairs for testing
-     * @param originName A label for use in logging (where the version pairs came from)
-     * @param testFunction The test function to use for testing
-     * @return a map of mismatched channel ids and versions, or an empty map if all channels accept themselves
-     */
-    private static Map<ResourceLocation, String> validateChannels(final Map<ResourceLocation, String> incoming, final String originName, BiFunction<NetworkInstance, String, Boolean> testFunction) {
-        final Map<ResourceLocation, String> results = instances.values().stream().
-                map(ni -> {
-                    final String incomingVersion = incoming.getOrDefault(ni.getChannelName(), ABSENT);
-                    final boolean test = testFunction.apply(ni, incomingVersion);
-                    LOGGER.debug(NETREGISTRY, "Channel '{}' : Version test of '{}' from {} : {}", ni.getChannelName(), incomingVersion, originName, test ? "ACCEPTED" : "REJECTED");
-                    return Pair.of(Pair.of(ni.getChannelName(), incomingVersion), test);
-                }).filter(p->!p.getRight()).map(Pair::getLeft).collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
-
-        if (!results.isEmpty()) {
-            LOGGER.error(NETREGISTRY, "Channels [{}] rejected their {} side version number",
-                    results.keySet().stream().map(Object::toString).collect(Collectors.joining(",")),
-                    originName);
-            return results;
-        }
-        LOGGER.debug(NETREGISTRY, "Accepting channel list from {}", originName);
-        return results;
-    }
-
-    /**
-     * Retrieve the {@link LoginPayload} list for dispatch during {@link HandshakeHandler#tickLogin(Connection)} handling.
-     * Dispatches {@link NetworkEvent.GatherLoginPayloadsEvent} to each {@link NetworkInstance}.
-     *
-     * @return The {@link LoginPayload} list
-     * @param direction the impl direction for the request - only gathers for LOGIN_TO_CLIENT
-     */
-    static List<LoginPayload> gatherLoginPayloads(final NetworkDirection direction, boolean isLocal) {
-        if (direction!=NetworkDirection.LOGIN_TO_CLIENT) return Collections.emptyList();
-        List<LoginPayload> gatheredPayloads = new ArrayList<>();
-        instances.values().forEach(ni->ni.dispatchGatherLogin(gatheredPayloads, isLocal));
-        return gatheredPayloads;
-    }
-
-    public static boolean checkListPingCompatibilityForClient(Map<ResourceLocation, Pair<String, Boolean>> incoming) {
-        Set<ResourceLocation> handled = new HashSet<>();
-        final List<Pair<ResourceLocation, Boolean>> results = instances.values().stream().
-                filter(p -> !p.getChannelName().getNamespace().equals("fml")).
-                map(ni -> {
-                    final Pair<String, Boolean> incomingVersion = incoming.getOrDefault(ni.getChannelName(), Pair.of(ABSENT, true));
-                    final boolean test = ni.tryServerVersionOnClient(incomingVersion.getLeft());
-                    handled.add(ni.getChannelName());
-                    LOGGER.debug(NETREGISTRY, "Channel '{}' : Version test of '{}' during listping : {}", ni.getChannelName(), incomingVersion, test ? "ACCEPTED" : "REJECTED");
-                    return Pair.of(ni.getChannelName(), test);
-                }).filter(p->!p.getRight()).collect(Collectors.toList());
-        final List<ResourceLocation> missingButRequired = incoming.entrySet().stream().
-                filter(p -> !p.getKey().getNamespace().equals("fml")).
-                filter(p -> !p.getValue().getRight()).
-                filter(p -> !handled.contains(p.getKey())).
-                map(Map.Entry::getKey).
-                collect(Collectors.toList());
-
-        if (!results.isEmpty()) {
-            LOGGER.error(NETREGISTRY, "Channels [{}] rejected their server side version number during listping",
-                    results.stream().map(Pair::getLeft).map(Object::toString).collect(Collectors.joining(",")));
-            return false;
-        }
-        if(!missingButRequired.isEmpty()){
-            LOGGER.error(NETREGISTRY, "The server is likely to require channel [{}] to be present, yet we don't have it",
-                    missingButRequired);
-            return false;
-        }
-        LOGGER.debug(NETREGISTRY, "Accepting channel list during listping");
-        return true;
-    }
-
-    private static boolean lock = false;
-    public boolean isLocked(){
-        return lock;
-    }
-
-    public static void lock() {
-        lock=true;
-    }
-
-    /**
-     * Tracks individual outbound messages for dispatch to clients during login handling. Gathered by dispatching
-     * {@link NetworkEvent.GatherLoginPayloadsEvent} during early connection handling.
-     */
-    public static class LoginPayload {
+    public static interface AttributeFactory<T> {
         /**
-         * The data for sending
+         * Creates a new instance to be attached to the specified connection.
+         * @param direction Either {@link NetworkDirection#LOGIN_TO_CLIENT} or {@link NetworkDirection#LOGIN_TO_SERVER}
+         * @param connection Vanilla's connection object
+         * @param type Will return the correct ConnectionType for {@link NetworkDirection#LOGIN_TO_CLIENT}, However will always return
+         * 		{@link ConnectionType#VANILLA} for {@link NetworkDirection#LOGIN_TO_SERVER} as the server hasn't identified itself yet.
+         * @return A new instance of this attribute object, which will be attached to the supplied connection.
          */
-        private final FriendlyByteBuf data;
-        /**
-         * A channel which will receive a {@link NetworkEvent.LoginPayloadEvent} from the {@link LoginWrapper}
-         */
-        private final ResourceLocation channelName;
-
-        /**
-         * Some context for logging purposes
-         */
-        private final String messageContext;
-
-        /**
-         * If the connection should await a response to this packet to continue with the handshake
-         */
-        private final boolean needsResponse;
-
-        public LoginPayload(final FriendlyByteBuf buffer, final ResourceLocation channelName, final String messageContext) {
-            this(buffer, channelName, messageContext, true);
-        }
-
-        public LoginPayload(final FriendlyByteBuf buffer, final ResourceLocation channelName, final String messageContext, final boolean needsResponse)
-        {
-            this.data = buffer;
-            this.channelName = channelName;
-            this.messageContext = messageContext;
-            this.needsResponse = needsResponse;
-        }
-
-        public FriendlyByteBuf getData() {
-            return data;
-        }
-
-        public ResourceLocation getChannelName() {
-            return channelName;
-        }
-
-        public String getMessageContext() {
-            return messageContext;
-        }
-
-        public boolean needsResponse()
-        {
-            return needsResponse;
-        }
+        T create(NetworkDirection direction, Connection connection, ConnectionType type);
     }
 
     /**
      * Builder for constructing impl channels using a builder style API.
      */
     public static class ChannelBuilder {
-        private ResourceLocation channelName;
+        private final ResourceLocation channelName;
         private Supplier<String> networkProtocolVersion;
-        private Predicate<String> clientAcceptedVersions;
-        private Predicate<String> serverAcceptedVersions;
+        private BiPredicate<ConnectionType, String> clientVersionTest;
+        private BiPredicate<ConnectionType, String> serverVersionTest;
+        private Map<AttributeKey<?>, AttributeFactory<?>> attributes = new HashMap<>();
 
         /**
          * The name of the channel. Must be unique.
          * @param channelName The name of the channel
          * @return the channel builder
          */
-        public static ChannelBuilder named(ResourceLocation channelName)
-        {
-            ChannelBuilder builder = new ChannelBuilder();
-            builder.channelName = channelName;
-            return builder;
+        public static ChannelBuilder named(ResourceLocation channelName) {
+            return new ChannelBuilder(channelName);
+        }
+
+        private ChannelBuilder(ResourceLocation name) {
+            this.channelName = name;
         }
 
         /**
          * The impl protocol string for this channel. This will be gathered during login and sent to
          * the remote partner, where it will be tested with against the relevant predicate.
          *
-         * @see #serverAcceptedVersions(Predicate)
-         * @see #clientAcceptedVersions(Predicate)
+         * @param version A supplier of strings for impl protocol version testing
+         * @return the channel builder
+         */
+        public ChannelBuilder networkProtocolVersion(String version) {
+            return networkProtocolVersion(() -> version);
+        }
+
+        /**
+         * The impl protocol string for this channel. This will be gathered during login and sent to
+         * the remote partner, where it will be tested with against the relevant predicate.
+         *
          * @param networkProtocolVersion A supplier of strings for impl protocol version testing
          * @return the channel builder
          */
-        public ChannelBuilder networkProtocolVersion(Supplier<String> networkProtocolVersion)
-        {
+        public ChannelBuilder networkProtocolVersion(Supplier<String> networkProtocolVersion) {
+            if (this.networkProtocolVersion != null)
+                throw new IllegalStateException("You can only set the protocol version once");
             this.networkProtocolVersion = networkProtocolVersion;
             return this;
         }
 
         /**
-         * A predicate run on the client, with the {@link #networkProtocolVersion(Supplier)} string from
-         * the server, or the special value {@link NetworkRegistry#ABSENT} indicating the absence of
+         * A predicate run on both sides, with the {@link #networkProtocolVersion(Supplier)} string from
+         * the remote side, or the special value null indicating the absence of
          * the channel on the remote side.
-         * @param clientAcceptedVersions A predicate for testing
+         * @param validator A predicate for testing the version string
          * @return the channel builder
          */
-        public ChannelBuilder clientAcceptedVersions(Predicate<String> clientAcceptedVersions)
-        {
-            this.clientAcceptedVersions = clientAcceptedVersions;
+        public ChannelBuilder acceptedVersions(Predicate<String> validator) {
+            return acceptedVersions((type, ver) -> validator.test(ver));
+        }
+
+        /**
+         * A predicate run on both sides, with the {@link #networkProtocolVersion(Supplier)} string from
+         * the remote side, or the special value null indicating the absence of
+         * the channel on the remote side. As well as the ConnectionType for this connection.
+         * @param validator A predicate for testing
+         * @return the channel builder
+         */
+        public ChannelBuilder acceptedVersions(BiPredicate<ConnectionType, String> validator) {
+            return clientAcceptedVersions(validator)
+                  .serverAcceptedVersions(validator);
+        }
+
+        /**
+         * A predicate run on the client, with the {@link #networkProtocolVersion(Supplier)} string from
+         * the server, or the special value null indicating the absence of
+         * the channel on the remote side.
+         * @param validator A predicate for testing
+         * @return the channel builder
+         */
+        public ChannelBuilder clientAcceptedVersions(Predicate<String> validator) {
+            return clientAcceptedVersions((type, ver) -> validator.test(ver));
+        }
+
+        /**
+         * A predicate run on the client, with the {@link #networkProtocolVersion(Supplier)} string from
+         * the server, or the special value null indicating the absence of
+         * the channel on the remote side. As well as the ConnectionType for this connection.
+         * @param validator A predicate for testing
+         * @return the channel builder
+         */
+        public ChannelBuilder clientAcceptedVersions(BiPredicate<ConnectionType, String> validator) {
+            this.clientVersionTest = validator;
             return this;
         }
 
         /**
          * A predicate run on the server, with the {@link #networkProtocolVersion(Supplier)} string from
-         * the server, or the special value {@link NetworkRegistry#ABSENT} indicating the absence of
+         * the client, or the special value null indicating the absence of
          * the channel on the remote side.
-         * @param serverAcceptedVersions A predicate for testing
+         * @param validator A predicate for testing
          * @return the channel builder
          */
-        public ChannelBuilder serverAcceptedVersions(Predicate<String> serverAcceptedVersions)
-        {
-            this.serverAcceptedVersions = serverAcceptedVersions;
+        public ChannelBuilder serverAcceptedVersions(Predicate<String> validator) {
+            return serverAcceptedVersions((type, ver) -> validator.test(ver));
+        }
+
+        /**
+         * A predicate run on the server, with the {@link #networkProtocolVersion(Supplier)} string from
+         * the client, or the special value null indicating the absence of
+         * the channel on the remote side. As well as the ConnectionType for this connection.
+         * @param validator A predicate for testing
+         * @return the channel builder
+         */
+        public ChannelBuilder serverAcceptedVersions(BiPredicate<ConnectionType, String> validator) {
+            this.serverVersionTest = validator;
+            return this;
+        }
+
+        /**
+         * Sets both the client and server version tests to match the exact version specified by {@link #networkProtocolVersion(Supplier)}
+         * @throws IllegalStateEception if {@link #networkProtocolVersion(Supplier)} has not been set.
+         */
+        public ChannelBuilder exactVersionOnly() {
+            if (this.networkProtocolVersion == null)
+                throw new IllegalStateException("Must set protocol version before setting version filter");
+
+            final var version = this.networkProtocolVersion;
+            return acceptedVersions((type, ver) -> version.get().equals(ver));
+        }
+
+        /**
+         * Sets both the client and server version tests so that it is successful when:<br />
+         * Remote version matches the exact version specified by {@link #networkProtocolVersion(Supplier)} <br />
+         * or <br />
+         * Remote version is missing
+         * @throws IllegalStateEception if {@link #networkProtocolVersion(Supplier)} has not been set.
+         */
+        public ChannelBuilder exactVersionOrMissing() {
+            return exactVersionOrMissingServer()
+                  .exactVersionOrMissingClient();
+        }
+
+        /**
+         * Sets the client version tests so that it is successful when:<br />
+         * Server version matches the exact version specified by {@link #networkProtocolVersion(Supplier)} <br />
+         * or <br />
+         * Server version is missing
+         * @throws IllegalStateEception if {@link #networkProtocolVersion(Supplier)} has not been set.
+         */
+        public ChannelBuilder exactVersionOrMissingServer() {
+            if (this.networkProtocolVersion == null)
+                throw new IllegalStateException("Must set protocol version before setting version filter");
+
+            final var version = this.networkProtocolVersion;
+            return clientAcceptedVersions((type, ver) -> ver == null || version.get().equals(ver));
+        }
+
+        /**
+         * Sets the server version tests so that it is successful when:<br />
+         * Client version matches the exact version specified by {@link #networkProtocolVersion(Supplier)} <br />
+         * or <br />
+         * Client version is missing
+         * @throws IllegalStateEception if {@link #networkProtocolVersion(Supplier)} has not been set.
+         */
+        public ChannelBuilder exactVersionOrMissingClient() {
+            if (this.networkProtocolVersion == null)
+                throw new IllegalStateException("Must set protocol version before setting version filter");
+
+            final var version = this.networkProtocolVersion;
+            return serverAcceptedVersions((type, ver) -> ver == null || version.get().equals(ver));
+        }
+
+        /**
+         * Sets both the client and server version tests to match anything.
+         */
+        public ChannelBuilder anyVersion() {
+            return acceptedVersions((type, ver) -> true);
+        }
+
+        /**
+         * Registers an attribute that will be attached to any new connection that is opened.
+         * @see AttributeFactory#create
+         *
+         * @param key The unique attribute key, must begin with this channels name.
+         * @param factory A factory that creates the attribute instance
+         */
+        public <T> ChannelBuilder attribute(AttributeKey<T> key, AttributeFactory<T> factory) {
+            if (!key.name().startsWith(this.channelName.toString()))
+                throw new IllegalArgumentException("Invalid attribute key " + key.name() + ", must begin with " + this.channelName);
+            this.attributes.put(key, factory);
             return this;
         }
 
@@ -420,7 +344,7 @@ public class NetworkRegistry
          * @return the {@link NetworkInstance}
          */
         private NetworkInstance createNetworkInstance() {
-            return createInstance(channelName, networkProtocolVersion, clientAcceptedVersions, serverAcceptedVersions);
+            return createInstance(channelName, networkProtocolVersion, clientVersionTest, serverVersionTest, attributes);
         }
 
         /**

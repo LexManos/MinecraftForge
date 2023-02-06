@@ -58,8 +58,6 @@ public class IndexedMessageCodec
         private final BiConsumer<MSG,Supplier<NetworkEvent.Context>> messageConsumer;
         private final Class<MSG> messageType;
         private final Optional<NetworkDirection> networkDirection;
-        private Optional<BiConsumer<MSG, Integer>> loginIndexSetter;
-        private Optional<Function<MSG, Integer>> loginIndexGetter;
 
         public MessageHandler(int index, Class<MSG> messageType, BiConsumer<MSG, FriendlyByteBuf> encoder, Function<FriendlyByteBuf, MSG> decoder, BiConsumer<MSG, Supplier<NetworkEvent.Context>> messageConsumer, final Optional<NetworkDirection> networkDirection)
         {
@@ -69,27 +67,8 @@ public class IndexedMessageCodec
             this.decoder = Optional.ofNullable(decoder);
             this.messageConsumer = messageConsumer;
             this.networkDirection = networkDirection;
-            this.loginIndexGetter = Optional.empty();
-            this.loginIndexSetter = Optional.empty();
             indicies.put((short)(index & 0xff), this);
             types.put(messageType, this);
-        }
-
-        void setLoginIndexSetter(BiConsumer<MSG, Integer> loginIndexSetter)
-        {
-            this.loginIndexSetter = Optional.of(loginIndexSetter);
-        }
-
-        Optional<BiConsumer<MSG, Integer>> getLoginIndexSetter() {
-            return this.loginIndexSetter;
-        }
-
-        void setLoginIndexGetter(Function<MSG, Integer> loginIndexGetter) {
-            this.loginIndexGetter = Optional.of(loginIndexGetter);
-        }
-
-        public Optional<Function<MSG, Integer>> getLoginIndexGetter() {
-            return this.loginIndexGetter;
         }
 
         MSG newInstance() {
@@ -102,28 +81,20 @@ public class IndexedMessageCodec
         }
     }
 
-    private static <M> void tryDecode(FriendlyByteBuf payload, Supplier<NetworkEvent.Context> context, int payloadIndex, MessageHandler<M> codec)
+    private static <M> void tryDecode(FriendlyByteBuf payload, Supplier<NetworkEvent.Context> context, MessageHandler<M> codec)
     {
-        codec.decoder.map(d->d.apply(payload)).
-                map(p->{
-                    // Only run the loginIndex function for payloadIndexed packets (login)
-                    if (payloadIndex != Integer.MIN_VALUE)
-                    {
-                        codec.getLoginIndexSetter().ifPresent(f-> f.accept(p, payloadIndex));
-                    }
-                    return p;
-                }).ifPresent(m->codec.messageConsumer.accept(m, context));
+        codec.decoder.map(d->d.apply(payload))
+            .ifPresent(m->codec.messageConsumer.accept(m, context));
     }
 
-    private static <M> int tryEncode(FriendlyByteBuf target, M message, MessageHandler<M> codec) {
+    private static <M> void tryEncode(FriendlyByteBuf target, M message, MessageHandler<M> codec) {
         codec.encoder.ifPresent(encoder->{
             target.writeByte(codec.index & 0xff);
             encoder.accept(message, target);
         });
-        return codec.loginIndexGetter.orElse(m -> Integer.MIN_VALUE).apply(message);
     }
 
-    public <MSG> int build(MSG message, FriendlyByteBuf target)
+    public <MSG> void build(MSG message, FriendlyByteBuf target)
     {
         @SuppressWarnings("unchecked")
         MessageHandler<MSG> messageHandler = (MessageHandler<MSG>)types.get(message.getClass());
@@ -131,16 +102,14 @@ public class IndexedMessageCodec
             LOGGER.error(SIMPLENET, "Received invalid message {} on channel {}", message.getClass().getName(), Optional.ofNullable(networkInstance).map(NetworkInstance::getChannelName).map(Objects::toString).orElse("MISSING CHANNEL"));
             throw new IllegalArgumentException("Invalid message "+message.getClass().getName());
         }
-        return tryEncode(target, message, messageHandler);
+        tryEncode(target, message, messageHandler);
     }
 
-    void consume(FriendlyByteBuf payload, int payloadIndex, Supplier<NetworkEvent.Context> context) {
+    void consume(FriendlyByteBuf payload, Supplier<NetworkEvent.Context> context) {
         if (payload == null || !payload.isReadable()) {
             LOGGER.error(SIMPLENET, "Received empty payload on channel {}", Optional.ofNullable(networkInstance).map(NetworkInstance::getChannelName).map(Objects::toString).orElse("MISSING CHANNEL"));
-            if (!HandshakeHandler.packetNeedsResponse(context.get().getNetworkManager(), payloadIndex))
-            {
-                context.get().setPacketHandled(true); //don't disconnect if the corresponding S2C packet that was not recognized on the client doesn't require a proper response
-            }
+            //context.get().setPacketHandled(true);
+            // Without setting this to handled, it will disconnect. Is there any case where we would NOT want to disconnect a invalid packet on a known channel?
             return;
         }
         short discriminator = payload.readUnsignedByte();
@@ -149,8 +118,8 @@ public class IndexedMessageCodec
             LOGGER.error(SIMPLENET, "Received invalid discriminator byte {} on channel {}", discriminator, Optional.ofNullable(networkInstance).map(NetworkInstance::getChannelName).map(Objects::toString).orElse("MISSING CHANNEL"));
             return;
         }
-        NetworkHooks.validatePacketDirection(context.get().getDirection(), messageHandler.networkDirection, context.get().getNetworkManager());
-        tryDecode(payload, context, payloadIndex, messageHandler);
+        NetworkHooks.validatePacketDirection(context.get().getDirection(), messageHandler.networkDirection, context.get().getConnection());
+        tryDecode(payload, context, messageHandler);
     }
 
     <MSG> MessageHandler<MSG> addCodecIndex(int index, Class<MSG> messageType, BiConsumer<MSG, FriendlyByteBuf> encoder, Function<FriendlyByteBuf, MSG> decoder, BiConsumer<MSG, Supplier<NetworkEvent.Context>> messageConsumer, final Optional<NetworkDirection> networkDirection) {

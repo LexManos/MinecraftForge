@@ -44,8 +44,13 @@ import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.*;
-import java.util.*;
+import java.io.IOException;
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -219,11 +224,11 @@ public class TierSortingRegistry
 
     private static final ResourceLocation CHANNEL_NAME = new ResourceLocation("forge:tier_sorting");
     private static final String PROTOCOL_VERSION = "1.0";
-    private static final SimpleChannel SYNC_CHANNEL = NetworkRegistry.newSimpleChannel(
-            CHANNEL_NAME, () -> "1.0",
-            versionFromServer -> PROTOCOL_VERSION.equals(versionFromServer) || (allowVanilla() && NetworkRegistry.ACCEPTVANILLA.equals(versionFromServer)),
-            versionFromClient -> PROTOCOL_VERSION.equals(versionFromClient) || (allowVanilla() && NetworkRegistry.ACCEPTVANILLA.equals(versionFromClient))
-    );
+    private static final SimpleChannel SYNC_CHANNEL = NetworkRegistry.ChannelBuilder
+        .named(CHANNEL_NAME)
+        .networkProtocolVersion(() -> PROTOCOL_VERSION)
+        .acceptedVersions((type, ver) -> PROTOCOL_VERSION.equals(ver) || (allowVanilla() && type.isVanilla()))
+        .simpleChannel();
 
     static boolean allowVanilla()
     {

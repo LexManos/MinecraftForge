@@ -69,7 +69,7 @@ public class RecipeBookExtensionTest
         if (event.getLevel().isClientSide)
             return;
         if (event.getLevel().getBlockState(event.getPos()).getBlock() == Blocks.GRASS_BLOCK)
-            NetworkHooks.openScreen((ServerPlayer) event.getEntity(), new SimpleMenuProvider((id, inv, p) -> new RecipeBookTestMenu(id, inv, ContainerLevelAccess.create(event.getLevel(), event.getPos())), Component.literal("Test")));
+            ((ServerPlayer)event.getEntity()).openModdedMenu(new SimpleMenuProvider((id, inv, p) -> new RecipeBookTestMenu(id, inv, ContainerLevelAccess.create(event.getLevel(), event.getPos())), Component.literal("Test")));
     }
 
     public static ResourceLocation getId(String name)

@@ -37,48 +37,56 @@ public class PacketDistributor<T> {
      * {@link #with(Supplier)} Player
      */
     public static final PacketDistributor<ServerPlayer> PLAYER = new PacketDistributor<>(PacketDistributor::playerConsumer, NetworkDirection.PLAY_TO_CLIENT);
+
     /**
      * Send to everyone in the dimension specified in the Supplier
      * <br/>
      * {@link #with(Supplier)} DimensionType
      */
     public static final PacketDistributor<ResourceKey<Level>> DIMENSION = new PacketDistributor<>(PacketDistributor::playerListDimConsumer, NetworkDirection.PLAY_TO_CLIENT);
+
     /**
      * Send to everyone near the {@link TargetPoint} specified in the Supplier
      * <br/>
      * {@link #with(Supplier)} TargetPoint
      */
     public static final PacketDistributor<TargetPoint> NEAR = new PacketDistributor<>(PacketDistributor::playerListPointConsumer, NetworkDirection.PLAY_TO_CLIENT);
+
     /**
      * Send to everyone
      * <br/>
      * {@link #noArg()}
      */
     public static final PacketDistributor<Void> ALL = new PacketDistributor<>(PacketDistributor::playerListAll, NetworkDirection.PLAY_TO_CLIENT);
+
     /**
      * Send to the server (CLIENT to SERVER)
      * <br/>
      * {@link #noArg()}
      */
     public static final PacketDistributor<Void> SERVER = new PacketDistributor<>(PacketDistributor::clientToServer, NetworkDirection.PLAY_TO_SERVER);
+
     /**
      * Send to all tracking the Entity in the Supplier
      * <br/>
      * {@link #with(Supplier)} Entity
      */
     public static final PacketDistributor<Entity> TRACKING_ENTITY = new PacketDistributor<>(PacketDistributor::trackingEntity, NetworkDirection.PLAY_TO_CLIENT);
+
     /**
      * Send to all tracking the Entity and Player in the Supplier
      * <br/>
      * {@link #with(Supplier)} Entity
      */
     public static final PacketDistributor<Entity> TRACKING_ENTITY_AND_SELF = new PacketDistributor<>(PacketDistributor::trackingEntityAndSelf, NetworkDirection.PLAY_TO_CLIENT);
+
     /**
      * Send to all tracking the Chunk in the Supplier
      * <br/>
      * {@link #with(Supplier)} Chunk
      */
     public static final PacketDistributor<LevelChunk> TRACKING_CHUNK = new PacketDistributor<>(PacketDistributor::trackingChunk, NetworkDirection.PLAY_TO_CLIENT);
+
     /**
      * Send to the supplied list of NetworkManager instances in the Supplier
      * <br/>
@@ -156,6 +164,7 @@ public class PacketDistributor<T> {
     public static class PacketTarget {
         private final Consumer<Packet<?>> packetConsumer;
         private final PacketDistributor<?> distributor;
+
         PacketTarget(final Consumer<Packet<?>> packetConsumer, final PacketDistributor<?> distributor) {
             this.packetConsumer = packetConsumer;
             this.distributor = distributor;
@@ -202,6 +211,7 @@ public class PacketDistributor<T> {
     private Consumer<Packet<?>> playerConsumer(final Supplier<ServerPlayer> entityPlayerMPSupplier) {
         return p -> entityPlayerMPSupplier.get().connection.connection.send(p);
     }
+
     private Consumer<Packet<?>> playerListDimConsumer(final Supplier<ResourceKey<Level>> dimensionTypeSupplier) {
         return p->getServer().getPlayerList().broadcastAll(p, dimensionTypeSupplier.get());
     }
@@ -235,6 +245,7 @@ public class PacketDistributor<T> {
         };
     }
 
+    @SuppressWarnings("resource")
     private Consumer<Packet<?>> trackingChunk(final Supplier<LevelChunk> chunkPosSupplier) {
         return p -> {
             final LevelChunk chunk = chunkPosSupplier.get();

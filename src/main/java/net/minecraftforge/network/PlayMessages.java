@@ -11,316 +11,157 @@ import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.MenuAccess;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.util.LogicalSidedProvider;
 import net.minecraftforge.entity.IEntityAdditionalSpawnData;
 
 import java.util.Optional;
-import java.util.UUID;
 import java.util.function.Supplier;
 
-public class PlayMessages
-{
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.Nullable;
+
+public class PlayMessages {
+    private static final Logger LOGGER = LogManager.getLogger();
     /**
-     * Used to spawn a custom entity without the same restrictions as
-     * {@link ClientboundAddEntityPacket}
+     * Used to spawn a custom entity without the same data restrictions as {@link ClientboundAddEntityPacket}.
+     * This is the same exact format as {@link ClientboundAddEntityPacket}, with additional data at the end:
+     * <pre>
+     *   VarInt Length
+     *   byte[Length] data
+     * </pre>
+     *
      * <p>
      * To customize how your entity is created clientside (instead of using the default factory provided to the
      * {@link EntityType})
      * see {@link EntityType.Builder#setCustomClientFactory}.
      */
-    public static class SpawnEntity
-    {
-        private final Entity entity;
-        private final int typeId;
-        private final int entityId;
-        private final UUID uuid;
-        private final double posX, posY, posZ;
-        private final byte pitch, yaw, headYaw;
-        private final int velX, velY, velZ;
-        private final FriendlyByteBuf buf;
-
-        SpawnEntity(Entity e)
-        {
-            this.entity = e;
-            this.typeId = BuiltInRegistries.ENTITY_TYPE.getId(e.getType()); //TODO: Codecs
-            this.entityId = e.getId();
-            this.uuid = e.getUUID();
-            this.posX = e.getX();
-            this.posY = e.getY();
-            this.posZ = e.getZ();
-            this.pitch = (byte) Mth.floor(e.getXRot() * 256.0F / 360.0F);
-            this.yaw = (byte) Mth.floor(e.getYRot() * 256.0F / 360.0F);
-            this.headYaw = (byte) (e.getYHeadRot() * 256.0F / 360.0F);
-            Vec3 vec3d = e.getDeltaMovement();
-            double d1 = Mth.clamp(vec3d.x, -3.9D, 3.9D);
-            double d2 = Mth.clamp(vec3d.y, -3.9D, 3.9D);
-            double d3 = Mth.clamp(vec3d.z, -3.9D, 3.9D);
-            this.velX = (int) (d1 * 8000.0D);
-            this.velY = (int) (d2 * 8000.0D);
-            this.velZ = (int) (d3 * 8000.0D);
-            this.buf = null;
+    public record SpawnEntity(
+        ClientboundAddEntityPacket vanillaData,
+        @Nullable FriendlyByteBuf customData
+    ) {
+        SpawnEntity(Entity e) {
+            this(new ClientboundAddEntityPacket(e), data(e) );
         }
 
-        private SpawnEntity(int typeId, int entityId, UUID uuid, double posX, double posY, double posZ, byte pitch, byte yaw, byte headYaw, int velX, int velY, int velZ, FriendlyByteBuf buf)
-        {
-            this.entity = null;
-            this.typeId = typeId;
-            this.entityId = entityId;
-            this.uuid = uuid;
-            this.posX = posX;
-            this.posY = posY;
-            this.posZ = posZ;
-            this.pitch = pitch;
-            this.yaw = yaw;
-            this.headYaw = headYaw;
-            this.velX = velX;
-            this.velY = velY;
-            this.velZ = velZ;
-            this.buf = buf;
+        private static @Nullable FriendlyByteBuf data(Entity entity) {
+            if (entity instanceof IEntityAdditionalSpawnData extra) {
+                var data = new FriendlyByteBuf(Unpooled.buffer());
+                extra.writeSpawnData(data);
+                return data;
+            }
+            return null;
         }
 
-        public static void encode(SpawnEntity msg, FriendlyByteBuf buf)
-        {
-            buf.writeVarInt(msg.typeId);
-            buf.writeInt(msg.entityId);
-            buf.writeLong(msg.uuid.getMostSignificantBits());
-            buf.writeLong(msg.uuid.getLeastSignificantBits());
-            buf.writeDouble(msg.posX);
-            buf.writeDouble(msg.posY);
-            buf.writeDouble(msg.posZ);
-            buf.writeByte(msg.pitch);
-            buf.writeByte(msg.yaw);
-            buf.writeByte(msg.headYaw);
-            buf.writeShort(msg.velX);
-            buf.writeShort(msg.velY);
-            buf.writeShort(msg.velZ);
-            if (msg.entity instanceof IEntityAdditionalSpawnData entityAdditionalSpawnData)
-            {
-                final FriendlyByteBuf spawnDataBuffer = new FriendlyByteBuf(Unpooled.buffer());
-
-                entityAdditionalSpawnData.writeSpawnData(spawnDataBuffer);
-
-                buf.writeVarInt(spawnDataBuffer.readableBytes());
-                buf.writeBytes(spawnDataBuffer);
-
-                spawnDataBuffer.release();
-            } else
-            {
+        public static void encode(SpawnEntity msg, FriendlyByteBuf buf) {
+            msg.vanillaData.write(buf);
+            if (msg.customData == null)
                 buf.writeVarInt(0);
+            else {
+                buf.writeVarInt(msg.customData.readableBytes());
+                buf.writeBytes(msg.customData.slice());
             }
         }
 
-        public static SpawnEntity decode(FriendlyByteBuf buf)
-        {
-            return new SpawnEntity(buf.readVarInt(), buf.readInt(), new UUID(buf.readLong(), buf.readLong()), buf.readDouble(), buf.readDouble(), buf.readDouble(), buf.readByte(), buf.readByte(), buf.readByte(), buf.readShort(), buf.readShort(), buf.readShort(), readSpawnDataPacket(buf));
+        public static SpawnEntity decode(FriendlyByteBuf buf) {
+            var vanillaData = new ClientboundAddEntityPacket(buf);
+            var length = buf.readVarInt();
+            if (length == 0)
+                return new SpawnEntity(vanillaData, null);
+
+            var customData = new FriendlyByteBuf(Unpooled.buffer());
+            customData.writeBytes(buf, length);
+
+            return new SpawnEntity(vanillaData, customData);
         }
 
-        private static FriendlyByteBuf readSpawnDataPacket(FriendlyByteBuf buf)
-        {
-            final int count = buf.readVarInt();
-            if (count > 0)
-            {
-                final FriendlyByteBuf spawnDataBuffer = new FriendlyByteBuf(Unpooled.buffer());
-                spawnDataBuffer.writeBytes(buf, count);
-                return spawnDataBuffer;
-            }
-
-            return new FriendlyByteBuf(Unpooled.buffer());
-        }
-
-        public static void handle(SpawnEntity msg, Supplier<NetworkEvent.Context> ctx)
-        {
+        public static void handle(SpawnEntity msg, Supplier<NetworkEvent.Context> ctx) {
             ctx.get().enqueueWork(() -> {
-                try
-                {
-                    EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.byId(msg.typeId);
+                try {
+                    EntityType<?> type = msg.vanillaData.getType();
+
                     Optional<Level> world = LogicalSidedProvider.CLIENTWORLD.get(ctx.get().getDirection().getReceptionSide());
-                    Entity e = world.map(w -> type.customClientSpawn(msg, w)).orElse(null);
-                    if (e == null)
-                    {
+                    Entity entity = world.map(w -> type.customClientSpawn(msg, w)).orElse(null);
+
+                    if (entity == null) {
+                        LOGGER.warn("Skipping Entity with id {}", type);
                         return;
                     }
 
-                    /*
-                     * Sets the postiion on the client, Mirrors what
-                     * Entity#recreateFromPacket and LivingEntity#recreateFromPacket does.
-                     */
-                    e.syncPacketPositionCodec(msg.posX, msg.posY, msg.posZ);
-                    e.absMoveTo(msg.posX, msg.posY, msg.posZ, (msg.yaw * 360) / 256.0F, (msg.pitch * 360) / 256.0F);
-                    e.setYHeadRot((msg.headYaw * 360) / 256.0F);
-                    e.setYBodyRot((msg.headYaw * 360) / 256.0F);
+                   entity.recreateFromPacket(msg.vanillaData);
+                   world.filter(ClientLevel.class::isInstance).ifPresent(w -> ((ClientLevel) w).putNonPlayerEntity(msg.vanillaData.getId(), entity));
+                   //this.postAddEntitySoundInstance(entity); No enter world sound for bees or minecarts. Modders can do this themselves.
 
-                    e.setId(msg.entityId);
-                    e.setUUID(msg.uuid);
-                    world.filter(ClientLevel.class::isInstance).ifPresent(w -> ((ClientLevel) w).putNonPlayerEntity(msg.entityId, e));
-                    e.lerpMotion(msg.velX / 8000.0, msg.velY / 8000.0, msg.velZ / 8000.0);
-                    if (e instanceof IEntityAdditionalSpawnData entityAdditionalSpawnData)
-                    {
-                        entityAdditionalSpawnData.readSpawnData(msg.buf);
-                    }
-                } finally
-                {
-                    msg.buf.release();
+                   if (msg.customData != null && entity instanceof IEntityAdditionalSpawnData extra)
+                        extra.readSpawnData(msg.customData);
+
+                } finally {
+                    if (msg.customData != null)
+                        msg.customData.release();
                 }
             });
             ctx.get().setPacketHandled(true);
-        }
-
-        public Entity getEntity()
-        {
-            return entity;
-        }
-
-        public int getTypeId()
-        {
-            return typeId;
-        }
-
-        public int getEntityId()
-        {
-            return entityId;
-        }
-
-        public UUID getUuid()
-        {
-            return uuid;
-        }
-
-        public double getPosX()
-        {
-            return posX;
-        }
-
-        public double getPosY()
-        {
-            return posY;
-        }
-
-        public double getPosZ()
-        {
-            return posZ;
-        }
-
-        public byte getPitch()
-        {
-            return pitch;
-        }
-
-        public byte getYaw()
-        {
-            return yaw;
-        }
-
-        public byte getHeadYaw()
-        {
-            return headYaw;
-        }
-
-        public int getVelX()
-        {
-            return velX;
-        }
-
-        public int getVelY()
-        {
-            return velY;
-        }
-
-        public int getVelZ()
-        {
-            return velZ;
-        }
-
-        public FriendlyByteBuf getAdditionalData()
-        {
-            return buf;
         }
     }
 
-    public static class OpenContainer
-    {
-        private final int id;
-        private final int windowId;
-        private final Component name;
-        private final FriendlyByteBuf additionalData;
+    /**
+     * Used to open a modded window on the client, gives the ability for extra data to be sent for context.
+     * <pre>
+     *   VarInt Menu Type
+     *   VarInt Window ID
+     *   UTF8String Window title comment in json format
+     *   VarInt Length
+     *   byte[Length] data
+     * </pre>
+     *
+     */
+    public record OpenContainer (
+        MenuType<?> type,
+        int windowId,
+        Component name,
+        FriendlyByteBuf additionalData
+    ) {
 
-        OpenContainer(MenuType<?> id, int windowId, Component name, FriendlyByteBuf additionalData)
-        {
-            this(BuiltInRegistries.MENU.getId(id), windowId, name, additionalData);
-        }
-
-        private OpenContainer(int id, int windowId, Component name, FriendlyByteBuf additionalData)
-        {
-            this.id = id;
-            this.windowId = windowId;
-            this.name = name;
-            this.additionalData = additionalData;
-        }
-
-        public static void encode(OpenContainer msg, FriendlyByteBuf buf)
-        {
-            buf.writeVarInt(msg.id);
+        @SuppressWarnings("deprecation")
+        public static void encode(OpenContainer msg, FriendlyByteBuf buf) {
+            buf.writeVarInt(BuiltInRegistries.MENU.getId(msg.type));
             buf.writeVarInt(msg.windowId);
             buf.writeComponent(msg.name);
             buf.writeByteArray(msg.additionalData.readByteArray());
+            msg.additionalData.readerIndex(0);
         }
 
-        public static OpenContainer decode(FriendlyByteBuf buf)
-        {
-            return new OpenContainer(buf.readVarInt(), buf.readVarInt(), buf.readComponent(), new FriendlyByteBuf(Unpooled.wrappedBuffer(buf.readByteArray(32600))));
+        @SuppressWarnings("deprecation")
+        public static OpenContainer decode(FriendlyByteBuf buf) {
+            return new OpenContainer(BuiltInRegistries.MENU.byId(buf.readVarInt()), buf.readVarInt(), buf.readComponent(), new FriendlyByteBuf(Unpooled.wrappedBuffer(buf.readByteArray(32600))));
         }
 
-        public static void handle(OpenContainer msg, Supplier<NetworkEvent.Context> ctx)
-        {
+        @SuppressWarnings("resource")
+        public static void handle(OpenContainer msg, Supplier<NetworkEvent.Context> ctx) {
             ctx.get().enqueueWork(() -> {
-                try
-                {
-                    MenuScreens.getScreenFactory(msg.getType(), Minecraft.getInstance(), msg.getWindowId(), msg.getName()).ifPresent(f -> {
-                        AbstractContainerMenu c = msg.getType().create(msg.getWindowId(), Minecraft.getInstance().player.getInventory(), msg.getAdditionalData());
+                try {
+                    MenuScreens.getScreenFactory(msg.type(), Minecraft.getInstance(), msg.windowId(), msg.name()).ifPresent(f -> {
+                        AbstractContainerMenu c = msg.type().create(msg.windowId(), Minecraft.getInstance().player.getInventory(), msg.additionalData());
 
-                        @SuppressWarnings("unchecked") Screen s = ((MenuScreens.ScreenConstructor<AbstractContainerMenu, ?>) f).create(c, Minecraft.getInstance().player.getInventory(), msg.getName());
+                        @SuppressWarnings("unchecked") Screen s = ((MenuScreens.ScreenConstructor<AbstractContainerMenu, ?>) f).create(c, Minecraft.getInstance().player.getInventory(), msg.name());
                         Minecraft.getInstance().player.containerMenu = ((MenuAccess<?>) s).getMenu();
                         Minecraft.getInstance().setScreen(s);
                     });
-                } finally
-                {
-                    msg.getAdditionalData().release();
+                } finally {
+                    msg.additionalData().release();
                 }
 
             });
             ctx.get().setPacketHandled(true);
-        }
-
-        public final MenuType<?> getType()
-        {
-            return BuiltInRegistries.MENU.byId(this.id);
-        }
-
-        public int getWindowId()
-        {
-            return windowId;
-        }
-
-        public Component getName()
-        {
-            return name;
-        }
-
-        public FriendlyByteBuf getAdditionalData()
-        {
-            return additionalData;
         }
     }
 }

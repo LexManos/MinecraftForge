@@ -7,7 +7,6 @@ package net.minecraftforge.network;
 
 import io.netty.util.AttributeKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.fml.IExtensionPoint;
 import net.minecraftforge.fml.IExtensionPoint.DisplayTest;
 import net.minecraftforge.network.ConnectionData.ModMismatchData;
 import net.minecraftforge.network.HandshakeMessages.S2CModList;
@@ -15,16 +14,22 @@ import net.minecraftforge.network.event.EventNetworkChannel;
 import net.minecraftforge.network.simple.SimpleChannel;
 import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
+import org.jetbrains.annotations.ApiStatus;
 
 import java.util.List;
+
 /**
  * Constants related to networking
  */
-public class NetworkConstants
-{
+@ApiStatus.Internal
+public class NetworkConstants {
     public static final String FMLNETMARKER = "FML";
     /**
-     * Netversion 3: {@link S2CModList} packet may include a list of non-vanilla synced datapack registry ids.
+     * 3: {@link S2CModList} packet may include a list of non-vanilla synced datapack registry ids.
+     *
+     * 4: Reworked all packets to be more concise, removed the Wrapper channel for login packets
+     *
+     * TODO: Document all packets and protocol version changes here, or in some document.
      */
     public static final int FMLNETVERSION = 3;
     public static final String NETVERSION = FMLNETMARKER + FMLNETVERSION;

@@ -16,16 +16,20 @@ import net.minecraft.ResourceLocationException;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.common.util.Lazy;
 import net.minecraftforge.fml.IExtensionPoint;
 import net.minecraftforge.fml.ModList;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.ApiStatus;
 
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import java.util.stream.Collectors;
@@ -81,38 +85,52 @@ import java.util.stream.StreamSupport;
  * }</pre>
  *
  */
-public class ServerStatusPing
-{
+@ApiStatus.Internal
+public class ServerStatusPing {
     private static final Logger LOGGER = LogManager.getLogger();
 
-    private final transient Map<ResourceLocation, Pair<String, Boolean>> channels;
+    public record ChannelInfo(String version, boolean optional) {};
+
+    private final transient Map<ResourceLocation, ChannelInfo> channels;
     private final transient Map<String, String> mods;
     private final transient int fmlNetworkVer;
     private final transient boolean truncated;
+    private final transient Lazy<Boolean> networksCompatible = Lazy.of(this::checkNetworksCompatible);
 
-    public ServerStatusPing()
-    {
-        this.channels = NetworkRegistry.buildChannelVersionsForListPing();
-        this.mods = new HashMap<>();
+    public ServerStatusPing() {
+        this.channels = buildChannels();
+        var tmp = new HashMap<String, String>();
         ModList.get().forEachModContainer((modid, mc) ->
-                    mods.put(modid, mc.getCustomExtension(IExtensionPoint.DisplayTest.class)
-                            .map(IExtensionPoint.DisplayTest::suppliedVersion)
-                            .map(Supplier::get)
-                            .orElse(NetworkConstants.IGNORESERVERONLY)));
+            tmp.put(modid, mc.getCustomExtension(IExtensionPoint.DisplayTest.class)
+                .map(IExtensionPoint.DisplayTest::suppliedVersion)
+                .map(Supplier::get)
+                .orElse(NetworkConstants.IGNORESERVERONLY)));
+        this.mods = Collections.unmodifiableMap(tmp);
         this.fmlNetworkVer = NetworkConstants.FMLNETVERSION;
         this.truncated = false;
     }
 
-    private ServerStatusPing(Map<ResourceLocation, Pair<String, Boolean>> deserialized, Map<String,String> modMarkers, int fmlNetVer, boolean truncated) {
+    private ServerStatusPing(Map<ResourceLocation, ChannelInfo> deserialized, Map<String,String> modMarkers, int fmlNetVer, boolean truncated) {
         this.channels = ImmutableMap.copyOf(deserialized);
         this.mods = modMarkers;
         this.fmlNetworkVer = fmlNetVer;
         this.truncated = truncated;
     }
 
+    private static Map<ResourceLocation, ChannelInfo> buildChannels() {
+        return NetworkRegistry.networks().entrySet().stream()
+            .filter(e -> e.getKey().getNamespace().equals("fml")) // Filter out FML's channels, we only care about mods
+            .collect(Collectors.toMap(
+                e -> e.getKey(),
+                e -> new ChannelInfo(
+                    e.getValue().getNetworkProtocolVersion(),
+                    e.getValue().tryClientVersionOnServer(ConnectionType.MODDED, null)
+                )
+            ));
+    }
+
     @Override
-    public String toString()
-    {
+    public String toString() {
         return "FMLStatusPing{" +
                 "channels=" + channels +
                 ", mods=" + mods +
@@ -123,67 +141,62 @@ public class ServerStatusPing
     }
 
     @Override
-    public boolean equals(Object o)
-    {
+    public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof ServerStatusPing that)) return false;
         return fmlNetworkVer == that.fmlNetworkVer && channels.equals(that.channels) && mods.equals(that.mods);
     }
 
     @Override
-    public int hashCode()
-    {
+    public int hashCode() {
         return Objects.hash(channels, mods, fmlNetworkVer);
     }
 
-    private List<Map.Entry<ResourceLocation, Pair<String, Boolean>>> getChannelsForMod(String modId)
-    {
+    private List<Map.Entry<ResourceLocation, ChannelInfo>> getChannelsForMod(String modId) {
         return channels.entrySet().stream()
-                .filter(c -> c.getKey().getNamespace().equals(modId))
-                .toList();
+            .filter(c -> c.getKey().getNamespace().equals(modId))
+            .toList();
     }
 
-    private List<Map.Entry<ResourceLocation, Pair<String, Boolean>>> getNonModChannels()
-    {
+    private List<Map.Entry<ResourceLocation, ChannelInfo>> getNonModChannels() {
         return channels.entrySet().stream()
-                .filter(c -> !mods.containsKey(c.getKey().getNamespace()))
-                .toList();
+            .filter(c -> !mods.containsKey(c.getKey().getNamespace()))
+            .toList();
     }
 
-    public static class Serializer
-    {
-        public static ServerStatusPing deserialize(JsonObject forgeData)
-        {
-            try
-            {
-                if (forgeData.has("d"))
-                {
+    public static class Serializer {
+        public static ServerStatusPing deserialize(JsonObject forgeData) {
+            try {
+                if (forgeData.has("d")) {
                     return deserializeOptimized(forgeData);
                 }
-                final Map<ResourceLocation, Pair<String, Boolean>> channels = StreamSupport.stream(GsonHelper.getAsJsonArray(forgeData, "channels").spliterator(), false).
-                        map(JsonElement::getAsJsonObject).
-                        collect(Collectors.toMap(jo -> new ResourceLocation(GsonHelper.getAsString(jo, "res")),
-                                jo -> Pair.of(GsonHelper.getAsString(jo, "version"), GsonHelper.getAsBoolean(jo, "required")))
-                        );
+                var channels = StreamSupport.stream(GsonHelper.getAsJsonArray(forgeData, "channels").spliterator(), false)
+                    .map(JsonElement::getAsJsonObject)
+                    .collect(Collectors.toMap(
+                        jo -> new ResourceLocation(GsonHelper.getAsString(jo, "res")),
+                        jo -> new ChannelInfo(
+                            GsonHelper.getAsString(jo, "version"),
+                            GsonHelper.getAsBoolean(jo, "required")
+                        )
+                    ));
 
-                final Map<String, String> mods = StreamSupport.stream(GsonHelper.getAsJsonArray(forgeData, "mods").spliterator(), false).
-                        map(JsonElement::getAsJsonObject).
-                        collect(Collectors.toMap(jo -> GsonHelper.getAsString(jo, "modId"), jo->GsonHelper.getAsString(jo, "modmarker")));
+                var mods = StreamSupport.stream(GsonHelper.getAsJsonArray(forgeData, "mods").spliterator(), false)
+                    .map(JsonElement::getAsJsonObject)
+                    .collect(Collectors.toMap(
+                        jo -> GsonHelper.getAsString(jo, "modId"),
+                        jo -> GsonHelper.getAsString(jo, "modmarker")
+                    ));
 
-                final int remoteFMLVersion = GsonHelper.getAsInt(forgeData, "fmlNetworkVersion");
-                final boolean truncated = GsonHelper.getAsBoolean(forgeData, "truncated", false);
+                var remoteFMLVersion = GsonHelper.getAsInt(forgeData, "fmlNetworkVersion");
+                var truncated = GsonHelper.getAsBoolean(forgeData, "truncated", false);
                 return new ServerStatusPing(channels, mods, remoteFMLVersion, truncated);
-            }
-            catch (JsonSyntaxException | IndexOutOfBoundsException | ResourceLocationException e)
-            {
+            } catch (JsonSyntaxException | IndexOutOfBoundsException | ResourceLocationException e) {
                 LOGGER.debug(NetworkConstants.NETWORK, "Encountered an error parsing status ping data", e);
                 return null;
             }
         }
 
-
-        public static JsonObject serialize(ServerStatusPing forgeData)
-        {
+        public static JsonObject serialize(ServerStatusPing forgeData) {
             // The following techniques are used to keep the size down:
             // 1. Try and group channels by ModID, this relies on the assumption that a mod "examplemod" uses a channel
             //    like "examplemod:network". In that case only the "path" of the ResourceLocation is written
@@ -204,55 +217,46 @@ public class ServerStatusPing
             buf.writeBoolean(false); // placeholder for whether we are truncating
             buf.writeShort(forgeData.mods.size()); // short so that we can replace it later in case of truncation
             int writtenCount = 0;
-            for (var modEntry : forgeData.mods.entrySet())
-            {
+            for (var modEntry : forgeData.mods.entrySet()) {
                 var isIgnoreServerOnly = modEntry.getValue().equals(NetworkConstants.IGNORESERVERONLY);
 
                 var channelsForMod = forgeData.getChannelsForMod(modEntry.getKey());
                 var channelSizeAndVersionFlag = channelsForMod.size() << 1;
+
                 if (isIgnoreServerOnly)
-                {
                     channelSizeAndVersionFlag |= VERSION_FLAG_IGNORESERVERONLY;
-                }
+
                 buf.writeVarInt(channelSizeAndVersionFlag);
 
                 buf.writeUtf(modEntry.getKey());
                 if (!isIgnoreServerOnly)
-                {
                     buf.writeUtf(modEntry.getValue());
-                }
 
                 // write the channels for this mod, if any
-                for (var entry : channelsForMod)
-                {
+                for (var entry : channelsForMod) {
                     buf.writeUtf(entry.getKey().getPath());
-                    buf.writeUtf(entry.getValue().getLeft());
-                    buf.writeBoolean(entry.getValue().getRight());
+                    buf.writeUtf(entry.getValue().version());
+                    buf.writeBoolean(entry.getValue().optional());
                 }
 
                 writtenCount++;
 
-                if (buf.readableBytes() >= 60000)
-                {
+                if (buf.readableBytes() >= 60000) {
                     reachedSizeLimit = true;
                     break;
                 }
             }
 
-            if (!reachedSizeLimit)
-            {
+            if (!reachedSizeLimit) {
                 // write any channels that don't match up with a ModID.
                 var nonModChannels = forgeData.getNonModChannels();
                 buf.writeVarInt(nonModChannels.size());
-                for (var entry : nonModChannels)
-                {
+                for (var entry : nonModChannels) {
                     buf.writeResourceLocation(entry.getKey());
-                    buf.writeUtf(entry.getValue().getLeft());
-                    buf.writeBoolean(entry.getValue().getRight());
+                    buf.writeUtf(entry.getValue().version());
+                    buf.writeBoolean(entry.getValue().optional());
                 }
-            }
-            else
-            {
+            } else {
                 buf.setShort(1, writtenCount);
                 buf.writeVarInt(0);
             }
@@ -273,17 +277,15 @@ public class ServerStatusPing
 
         private static final int VERSION_FLAG_IGNORESERVERONLY = 0b1;
 
-        private static ServerStatusPing deserializeOptimized(JsonObject forgeData)
-        {
+        private static ServerStatusPing deserializeOptimized(JsonObject forgeData) {
             int remoteFMLVersion = GsonHelper.getAsInt(forgeData, "fmlNetworkVersion");
             var buf = new FriendlyByteBuf(decodeOptimized(GsonHelper.getAsString(forgeData, "d")));
 
             boolean truncated;
-            Map<ResourceLocation, Pair<String, Boolean>> channels;
+            Map<ResourceLocation, ChannelInfo> channels;
             Map<String, String> mods;
 
-            try
-            {
+            try {
                 truncated = buf.readBoolean();
                 var modsSize = buf.readUnsignedShort();
                 mods = new HashMap<>();
@@ -297,8 +299,8 @@ public class ServerStatusPing
                     for (var i1 = 0; i1 < channelSize; i1++) {
                         var channelName = buf.readUtf();
                         var channelVersion = buf.readUtf();
-                        var requiredOnClient = buf.readBoolean();
-                        channels.put(new ResourceLocation(modId, channelName), Pair.of(channelVersion, requiredOnClient));
+                        var optionalOnClient = buf.readBoolean();
+                        channels.put(new ResourceLocation(modId, channelName), new ChannelInfo(channelVersion, optionalOnClient));
                     }
 
                     mods.put(modId, modVersion);
@@ -308,12 +310,10 @@ public class ServerStatusPing
                 for (var i = 0; i < nonModChannelCount; i++) {
                     var channelName = buf.readResourceLocation();
                     var channelVersion = buf.readUtf();
-                    var requiredOnClient = buf.readBoolean();
-                    channels.put(channelName, Pair.of(channelVersion, requiredOnClient));
+                    var optionalOnClient = buf.readBoolean();
+                    channels.put(channelName, new ChannelInfo(channelVersion, optionalOnClient));
                 }
-            }
-            finally
-            {
+            } finally {
                 buf.release();
             }
 
@@ -324,8 +324,7 @@ public class ServerStatusPing
          * Encode given ByteBuf to a String. This is optimized for UTF-16 Code-Point count.
          * Supports at most 2^30 bytes in length
          */
-        private static String encodeOptimized(ByteBuf buf)
-        {
+        private static String encodeOptimized(ByteBuf buf) {
             var byteLength = buf.readableBytes();
             var sb = new StringBuilder();
             sb.append((char) (byteLength & 0x7FFF));
@@ -333,10 +332,8 @@ public class ServerStatusPing
 
             int buffer = 0; // we will need at most 8 + 14 = 22 bits of buffer, so an int is enough
             int bitsInBuf = 0;
-            while (buf.isReadable())
-            {
-                if (bitsInBuf >= 15)
-                {
+            while (buf.isReadable()) {
+                if (bitsInBuf >= 15) {
                     char c = (char) (buffer & 0x7FFF);
                     sb.append(c);
                     buffer >>>= 15;
@@ -347,8 +344,7 @@ public class ServerStatusPing
                 bitsInBuf += 8;
             }
 
-            if (bitsInBuf > 0)
-            {
+            if (bitsInBuf > 0) {
                 char c = (char) (buffer & 0x7FFF);
                 sb.append(c);
             }
@@ -358,8 +354,7 @@ public class ServerStatusPing
         /**
          * Decode binary data encoded by {@link #encodeOptimized}
          */
-        private static ByteBuf decodeOptimized(String s)
-        {
+        private static ByteBuf decodeOptimized(String s) {
             var size0 = ((int) s.charAt(0));
             var size1 = ((int) s.charAt(1));
             var size = size0 | (size1 << 15);
@@ -369,10 +364,8 @@ public class ServerStatusPing
             int stringIndex = 2;
             int buffer = 0; // we will need at most 8 + 14 = 22 bits of buffer, so an int is enough
             int bitsInBuf = 0;
-            while (stringIndex < s.length())
-            {
-                while (bitsInBuf >= 8)
-                {
+            while (stringIndex < s.length()) {
+                while (bitsInBuf >= 8) {
                     buf.writeByte(buffer);
                     buffer >>>= 8;
                     bitsInBuf -= 8;
@@ -385,8 +378,7 @@ public class ServerStatusPing
             }
 
             // write any leftovers
-            while (buf.readableBytes() < size)
-            {
+            while (buf.readableBytes() < size) {
                 buf.writeByte(buffer);
                 buffer >>>= 8;
                 bitsInBuf -= 8;
@@ -395,23 +387,63 @@ public class ServerStatusPing
         }
     }
 
-    public Map<ResourceLocation, Pair<String, Boolean>> getRemoteChannels()
-    {
+    public Map<ResourceLocation, ChannelInfo> getRemoteChannels() {
         return this.channels;
     }
 
-    public Map<String,String> getRemoteModData()
-    {
+    public Map<String, String> getRemoteModData() {
         return mods;
     }
 
-    public int getFMLNetworkVersion()
-    {
+    public int getFMLNetworkVersion() {
         return fmlNetworkVer;
     }
 
-    public boolean isTruncated()
-    {
+    public boolean isTruncated() {
         return truncated;
+    }
+
+    public boolean areNetworksCompatible() {
+        return networksCompatible.get();
+    }
+
+    private boolean checkNetworksCompatible() {
+        var instances = NetworkRegistry.networks();
+        Set<ResourceLocation> seen = new HashSet<>();
+        Set<ResourceLocation> rejected = new HashSet<>();
+        instances.forEach((name, ni) -> {
+            if (name.getNamespace().equals("fml"))
+                return; // We filter out FML stuff, which should be done on the server side, but might as well test.
+            seen.add(name);
+            var version = this.channels.get(ni.getChannelName());
+            var accept = ni.tryServerVersionOnClient(ConnectionType.MODDED, version == null ? null : version.version());
+            LOGGER.debug(NetworkRegistry.NETREGISTRY, "Channel '{}' : Version test of '{}' during listping : {}", ni.getChannelName(), version, accept ? "ACCEPTED" : "REJECTED");
+            if (!accept)
+                rejected.add(name);
+        });
+
+        var missingButRequired = this.channels.entrySet().stream()
+            .filter(p ->
+                !p.getKey().getNamespace().equals("fml") &&
+                !p.getValue().optional() &&
+                !seen.contains(p.getKey())
+            )
+            .map(Map.Entry::getKey)
+            .collect(Collectors.toList());
+
+        if (!rejected.isEmpty()) {
+            LOGGER.error(NetworkRegistry.NETREGISTRY, "Channels [{}] rejected their server side version number during listping",
+                rejected.stream().map(Object::toString).collect(Collectors.joining(",")));
+            return false;
+        }
+
+        if (!missingButRequired.isEmpty()) {
+            LOGGER.error(NetworkRegistry.NETREGISTRY, "The server is likely to require channel [{}] to be present, yet we don't have it",
+                missingButRequired);
+            return false;
+        }
+
+        LOGGER.debug(NetworkRegistry.NETREGISTRY, "Accepting channel list during listping");
+        return true;
     }
 }

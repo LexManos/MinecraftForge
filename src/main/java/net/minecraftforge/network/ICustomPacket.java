@@ -7,11 +7,13 @@ package net.minecraftforge.network;
 
 import net.minecraft.network.protocol.Packet;
 
+import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
+@ApiStatus.Internal
 public interface ICustomPacket<T extends Packet<?>> {
     /**
      * Returns a unsafe reference to this packet's internal data.
@@ -29,7 +31,7 @@ public interface ICustomPacket<T extends Packet<?>> {
     }
 
     @SuppressWarnings("unchecked")
-    default T getThis() {
+    default T self() {
         return (T)this;
     }
 }
