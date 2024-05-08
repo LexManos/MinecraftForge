@@ -393,7 +393,7 @@
              }
          }
      }
-@@ -2147,6 +_,65 @@
+@@ -2147,6 +_,49 @@
          this.currentImpulseImpactPos = null;
          this.ignoreFallDamageFromCurrentImpulse = false;
      }
@@ -415,28 +415,12 @@
 +        this.displayname = net.minecraftforge.event.ForgeEventFactory.getPlayerDisplayName(this, this.getName());
 +    }
 +
-+    private final net.minecraftforge.common.util.LazyOptional<net.minecraftforge.items.IItemHandler>
-+        playerMainHandler = net.minecraftforge.common.util.LazyOptional.of(
-+            () -> new net.minecraftforge.items.wrapper.PlayerMainInvWrapper(inventory));
-+
-+    private final net.minecraftforge.common.util.LazyOptional<net.minecraftforge.items.IItemHandler>
-+        playerEquipmentHandler = net.minecraftforge.common.util.LazyOptional.of(
-+            () -> new net.minecraftforge.items.wrapper.CombinedInvWrapper(
-+                  new net.minecraftforge.items.wrapper.PlayerArmorInvWrapper(inventory),
-+                  new net.minecraftforge.items.wrapper.PlayerOffhandInvWrapper(inventory)));
-+
-+    private final net.minecraftforge.common.util.LazyOptional<net.minecraftforge.items.IItemHandler>
-+        playerJoinedHandler = net.minecraftforge.common.util.LazyOptional.of(
-+            () -> new net.minecraftforge.items.wrapper.PlayerInvWrapper(inventory));
++    private final net.minecraftforge.common.capabilities.providers.PlayerProvider caps = new net.minecraftforge.common.capabilities.providers.PlayerProvider(this);
 +
 +    @Override
 +    public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(net.minecraftforge.common.capabilities.Capability<T> capability, @Nullable Direction facing) {
-+        if (capability == net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER && this.isAlive()) {
-+            if (facing == null) return playerJoinedHandler.cast();
-+            else if (facing.getAxis().isVertical()) return playerMainHandler.cast();
-+            else if (facing.getAxis().isHorizontal()) return playerEquipmentHandler.cast();
-+        }
-+        return super.getCapability(capability, facing);
++        var ret = caps.getCapability(capability, facing);
++        return ret.isPresent() ? ret : super.getCapability(capability, facing);
 +    }
 +
 +    /**

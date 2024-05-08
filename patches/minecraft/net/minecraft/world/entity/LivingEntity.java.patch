@@ -649,7 +649,7 @@
          Equipable equipable = Equipable.get(p_147234_);
          return equipable != null ? equipable.getEquipmentSlot() : EquipmentSlot.MAINHAND;
      }
-@@ -3534,5 +_,42 @@
+@@ -3534,5 +_,36 @@
      }
  
      public static record Fallsounds(SoundEvent small, SoundEvent big) {
@@ -666,29 +666,23 @@
 +        return this instanceof net.minecraft.world.entity.animal.Pig;
 +    }
 +
-+    private net.minecraftforge.common.util.LazyOptional<?>[] handlers = net.minecraftforge.items.wrapper.EntityEquipmentInvWrapper.create(this);
++    private net.minecraftforge.common.capabilities.providers.LivingEntityProvider caps = new net.minecraftforge.common.capabilities.providers.LivingEntityProvider(this);
 +
 +    @Override
 +    public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(net.minecraftforge.common.capabilities.Capability<T> capability, @Nullable Direction facing) {
-+        if (capability == net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER && this.isAlive()) {
-+             if (facing == null) return handlers[2].cast();
-+             else if (facing.getAxis().isVertical()) return handlers[0].cast();
-+             else if (facing.getAxis().isHorizontal()) return handlers[1].cast();
-+        }
-+        return super.getCapability(capability, facing);
++        var ret = caps.getCapability(capability, facing);
++        return ret.isPresent() ? ret : super.getCapability(capability, facing);
 +    }
 +
 +    @Override
 +    public void invalidateCaps() {
 +        super.invalidateCaps();
-+        for (int x = 0; x < handlers.length; x++) {
-+             handlers[x].invalidate();
-+        }
++        caps.invalidate();
 +    }
 +
 +    @Override
 +    public void reviveCaps() {
 +        super.reviveCaps();
-+        handlers = net.minecraftforge.items.wrapper.EntityEquipmentInvWrapper.create(this);
++        caps = new net.minecraftforge.common.capabilities.providers.LivingEntityProvider(this);
      }
  }

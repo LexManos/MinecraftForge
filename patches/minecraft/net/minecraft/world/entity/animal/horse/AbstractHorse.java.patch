@@ -16,7 +16,7 @@
  
          this.inventory.addListener(this);
          this.syncSaddleToClients();
-+        this.itemHandler = net.minecraftforge.common.util.LazyOptional.of(() -> new net.minecraftforge.items.wrapper.InvWrapper(this.inventory));
++        this.caps.createInventory(this.inventory);
      }
  
      protected void syncSaddleToClients() {
@@ -40,29 +40,23 @@
      }
  
      protected void playJumpSound() {
-@@ -1126,5 +_,25 @@
+@@ -1126,5 +_,19 @@
  
      public final Container getBodyArmorAccess() {
          return this.bodyArmorAccess;
 +    }
 +
-+    private net.minecraftforge.common.util.LazyOptional<?> itemHandler = null;
++    private net.minecraftforge.common.capabilities.providers.HorseProvider caps = new net.minecraftforge.common.capabilities.providers.HorseProvider(this);
 +
 +    @Override
 +    public <T> net.minecraftforge.common.util.LazyOptional<T> getCapability(net.minecraftforge.common.capabilities.Capability<T> capability, @Nullable net.minecraft.core.Direction facing) {
-+        if (capability == net.minecraftforge.common.capabilities.ForgeCapabilities.ITEM_HANDLER && itemHandler != null && this.isAlive()) {
-+            return itemHandler.cast();
-+        }
-+        return super.getCapability(capability, facing);
++        var ret = caps.getCapability(capability, facing);
++        return ret.isPresent() ? ret : super.getCapability(capability, facing);
 +    }
 +
 +    @Override
 +    public void invalidateCaps() {
 +        super.invalidateCaps();
-+        if (itemHandler != null) {
-+           var oldHandler = itemHandler;
-+           itemHandler = null;
-+           oldHandler.invalidate();
-+        }
++        caps.invalidate();
      }
  }

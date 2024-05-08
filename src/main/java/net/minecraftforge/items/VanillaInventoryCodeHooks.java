@@ -12,6 +12,7 @@ import net.minecraft.world.level.block.entity.Hopper;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.DispenserBlockEntity;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraftforge.common.capabilities.ForgeCapabilities;
 import net.minecraft.core.Direction;
 import net.minecraft.core.BlockPos;
@@ -236,7 +237,7 @@ public class VanillaInventoryCodeHooks
         int j = Mth.floor(y);
         int k = Mth.floor(z);
         BlockPos blockpos = new BlockPos(i, j, k);
-        net.minecraft.world.level.block.state.BlockState state = worldIn.getBlockState(blockpos);
+        BlockState state = worldIn.getBlockState(blockpos);
 
         if (state.hasBlockEntity())
         {
