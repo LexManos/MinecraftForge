@@ -50,11 +50,12 @@ public interface IForgeGameTestHelper {
            }
         };
         var connection = new Connection(PacketFlow.SERVERBOUND);
+        @SuppressWarnings("unused") // The constructor has side effects so we need to call it.
         var channel = new EmbeddedChannel(connection);
         var server = level.getServer();
 
         var listener = new ServerGamePacketListenerImpl(server, connection, player, cookie);
-        var info = GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(server.registryAccess()));
+        var info = GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(server.registryAccess(), connection));
         connection.setupInboundProtocol(info, listener);
         return player;
     }

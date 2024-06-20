@@ -1,14 +1,42 @@
 --- a/net/minecraft/network/RegistryFriendlyByteBuf.java
 +++ b/net/minecraft/network/RegistryFriendlyByteBuf.java
-@@ -16,6 +_,11 @@
+@@ -6,17 +_,39 @@
+ 
+ public class RegistryFriendlyByteBuf extends FriendlyByteBuf {
+     private final RegistryAccess registryAccess;
++    private final Connection connection;
+ 
++    /** @deprecated Forge: Supply the Connection as well so that codecs can determine how to encode based on more information then the registries */
+     public RegistryFriendlyByteBuf(ByteBuf p_333796_, RegistryAccess p_330009_) {
++        this(p_333796_, p_330009_, null);
++    }
++
++    public RegistryFriendlyByteBuf(ByteBuf p_333796_, RegistryAccess p_330009_, @org.jetbrains.annotations.Nullable Connection connection) {
+         super(p_333796_);
+         this.registryAccess = p_330009_;
++        this.connection = connection;
+     }
+ 
+     public RegistryAccess registryAccess() {
          return this.registryAccess;
      }
  
-+    @Override
-+    public RegistryFriendlyByteBuf wrap(ByteBuf data) {
-+        return new RegistryFriendlyByteBuf(data, this.registryAccess);
++    @org.jetbrains.annotations.Nullable
++    public Connection connection() {
++        return this.connection;
 +    }
 +
++    @Override
++    public RegistryFriendlyByteBuf wrap(ByteBuf data) {
++        return new RegistryFriendlyByteBuf(data, this.registryAccess, this.connection);
++    }
++
++    /** @deprecated Forge: Supply the Connection as well so that codecs can determine how to encode based on more information then the registries */
      public static Function<ByteBuf, RegistryFriendlyByteBuf> decorator(RegistryAccess p_336066_) {
          return p_328649_ -> new RegistryFriendlyByteBuf(p_328649_, p_336066_);
++    }
++
++    public static Function<ByteBuf, RegistryFriendlyByteBuf> decorator(RegistryAccess registry, Connection connection) {
++        return buf -> new RegistryFriendlyByteBuf(buf, registry, connection);
      }
+ }

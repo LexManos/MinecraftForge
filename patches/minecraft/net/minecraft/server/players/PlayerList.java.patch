@@ -8,6 +8,15 @@
  
      public PlayerList(MinecraftServer p_203842_, LayeredRegistryAccess<RegistryLayer> p_251844_, PlayerDataStorage p_203844_, int p_203845_) {
          this.server = p_203842_;
+@@ -176,7 +_,7 @@
+         LevelData leveldata = serverlevel1.getLevelData();
+         p_11263_.loadGameTypes(optional1.orElse(null));
+         ServerGamePacketListenerImpl servergamepacketlistenerimpl = new ServerGamePacketListenerImpl(this.server, p_11262_, p_11263_, p_297215_);
+-        p_11262_.setupInboundProtocol(GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(this.server.registryAccess())), servergamepacketlistenerimpl);
++        p_11262_.setupInboundProtocol(GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(this.server.registryAccess(), p_11262_)), servergamepacketlistenerimpl);
+         GameRules gamerules = serverlevel1.getGameRules();
+         boolean flag = gamerules.getBoolean(GameRules.RULE_DO_IMMEDIATE_RESPAWN);
+         boolean flag1 = gamerules.getBoolean(GameRules.RULE_REDUCEDDEBUGINFO);
 @@ -261,6 +_,7 @@
          }
  
