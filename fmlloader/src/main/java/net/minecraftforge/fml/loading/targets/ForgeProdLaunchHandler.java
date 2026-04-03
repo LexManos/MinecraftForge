@@ -25,7 +25,9 @@ sealed abstract class ForgeProdLaunchHandler extends CommonLaunchHandler {
 
         @Override
         public List<Path> getMinecraftPaths() {
-            return List.of(getPathFromResource("net/minecraft/client/Minecraft.class"));
+            // We use a marker because 3rd party launcher don't build their class paths correctly
+            // https://github.com/MinecraftForge/MinecraftForge/issues/10797
+            return List.of(getPathFromResource(".forge_patched_minecraft"));
         }
     }
 

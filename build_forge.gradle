@@ -88,7 +88,7 @@ ext {
 }
 final String MAVEN_PATH = ext.MAVEN_PATH
 
-final String BINPATCH_TOOL = 'net.minecraftforge:binarypatcher:1.2.0:fatjar'
+final String BINPATCH_TOOL = 'net.minecraftforge:binarypatcher:1.3.0:fatjar'
 final String INSTALLER_TOOLS = 'net.minecraftforge:installertools:1.4.5'
 final String FART = 'net.minecraftforge:ForgeAutoRenamingTool:1.0.6'
 final String S2S_TOOL = 'net.minecraftforge:Srg2Source:8.2.0:fatjar'
@@ -459,14 +459,14 @@ tasks.register('applyClientBinPatches', ApplyBinPatches) {
     tool = BINPATCH_TOOL
     clean = downloadClientRaw.dest
     patch = genClientBinPatches.output
-    args.addAll(['--data', '--unpatched'])
+    args.addAll(['--data', '--unpatched', '--store', '--marker', '.forge_patched_minecraft'])
 }
 tasks.register('applyServerBinPatches', ApplyBinPatches) {
     dependsOn extractServer
     tool = BINPATCH_TOOL
     clean = extractServer.output
     patch = genServerBinPatches.output
-    args.addAll(['--data', '--unpatched'])
+    args.addAll(['--data', '--unpatched', '--store'])
 }
 tasks.register('applyJoinedBinPatches', ApplyBinPatches) {
     tool = BINPATCH_TOOL
@@ -718,7 +718,7 @@ tasks.register('installerJson', InstallerJson) {
                         '--clean', '{MC_UNPACKED}',
                         '--output', '{PATCHED}',
                         '--apply', '{BINPATCH}',
-                        '--data', '--unpatched'
+                        '--data', '--unpatched', '--store'
                     ],
                     outputs: [
                         '{PATCHED}': '{PATCHED_SHA}'
@@ -731,7 +731,7 @@ tasks.register('installerJson', InstallerJson) {
                         '--clean', '{MINECRAFT_JAR}',
                         '--output', '{PATCHED}',
                         '--apply', '{BINPATCH}',
-                        '--data', '--unpatched'
+                        '--data', '--unpatched', '--store', '--marker', '.forge_patched_minecraft'
                     ],
                     outputs: [
                         '{PATCHED}': '{PATCHED_SHA}'
