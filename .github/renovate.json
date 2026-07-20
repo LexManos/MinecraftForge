@@ -6,6 +6,14 @@
     {
       "matchManagers": ["gradle-wrapper", "github-actions"],
       "enabled": false
-    }
+    },
+    {
+      "matchManagers": [ "gradle" ],
+      "registryUrls": [
+        "https://maven.minecraftforge.net/",
+        "https://repo.maven.apache.org/maven2/",
+        "https://plugins.gradle.org/m2/"
+      ]
+    },
   ]
 }
