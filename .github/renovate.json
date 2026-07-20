@@ -2,6 +2,9 @@
   "baseBranchPatterns": [
     "26.2"
   ],
+  "extends": [
+    "config:recommended"
+  ],
   "packageRules": [
     {
       "matchManagers": ["gradle-wrapper", "github-actions"],
