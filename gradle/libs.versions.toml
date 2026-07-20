@@ -81,7 +81,7 @@ jopt-simple    = { module = "net.sf.jopt-simple:jopt-simple",   version = "5.0.4
 commons-io     = { module = "commons-io:commons-io",            version = "2.17.0" }
 
 # Logging related libraries
-slf4j-api   = { module = "org.slf4j:slf4j-api", version = "2.0.7" }
+slf4j-api   = { module = "org.slf4j:slf4j-api", version = "2.0.18" }
 log4j-api   = { module = "org.apache.logging.log4j:log4j-api", version.ref = "log4j" }
 log4j-core  = { module = "org.apache.logging.log4j:log4j-core", version.ref = "log4j" }
 mojang-logging  = { module = "com.mojang:logging", version = "1.5.10" }
