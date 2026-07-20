@@ -28,6 +28,7 @@ apt         = { id = "com.diffplug.eclipse.apt",           version = "4.4.1"  }
 # TODO [Forge][Buildscript We should not be needing to manually add transitive dependencies
 #      If we need to make strict versions for dependencies, we should do so using dependency constraints
 forgespi           = { module = "net.minecraftforge:forgespi",           version = "8.0.0" }  # Needs modlauncher
+forgespi           = { module = "net.minecraftforge:forgespiasdfasdf",           version = "8.0.0" }  # Needs modlauncher
 modlauncher        = { module = "net.minecraftforge:modlauncher",        version = "10.2.4" } # Needs securemodules
 securemodules      = { module = "net.minecraftforge:securemodules",      version = "2.2.24" } # Needs unsafe
 unsafe             = { module = "net.minecraftforge:unsafe",             version = "0.9.2" }
