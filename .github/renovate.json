@@ -4,7 +4,7 @@
   ],
   "packageRules": [
     {
-      "matchManagers": ["gradle-wrapper"],
+      "matchManagers": ["gradle-wrapper", "github-actions"],
       "enabled": false
     }
   ]
