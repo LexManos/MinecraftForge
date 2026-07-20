@@ -39,27 +39,27 @@ dependencies {
     compileOnly libs.jetbrains.annotations
 
     // TODO [FMLLoader] Figure out a better way to lock transitive dependencies to the explicit versions shipped by the isntaller
-    api(libs.bundles.asm         ){ transitive = false } // Needed by all the black magic
-    api(libs.forgespi            ){ transitive = false }
-    api(libs.mergetool.api       ){ transitive = false }
-    api(libs.log4j.api           ){ transitive = false }
-    api(libs.slf4j.api           ){ transitive = false }
-    api(libs.guava               ){ transitive = false }
-    api(libs.gson                ){ transitive = false }
-    api(libs.maven.artifact      ){ transitive = false }
-    api(libs.apache.commons      ){ transitive = false }
-    api(libs.bundles.night.config){ transitive = false }
-    api(libs.modlauncher         ){ transitive = false }
-    api(libs.mojang.logging      ){ transitive = false }
-    api(libs.jarjar.selector     ){ transitive = false }
-    api(libs.jarjar.meta         ){ transitive = false }
+    api(libs.bundles.asm    ){ transitive = false } // Needed by all the black magic
+    api(libs.forgespi       ){ transitive = false }
+    api(libs.mergetool.api  ){ transitive = false }
+    api(libs.log4j.api      ){ transitive = false }
+    api(libs.slf4j.api      ){ transitive = false }
+    api(libs.guava          ){ transitive = false }
+    api(libs.gson           ){ transitive = false }
+    api(libs.maven.artifact ){ transitive = false }
+    api(libs.apache.commons ){ transitive = false }
+    api(libs.bundles.config ){ transitive = false }
+    api(libs.modlauncher    ){ transitive = false }
+    api(libs.mojang.logging ){ transitive = false }
+    api(libs.jarjar.selector){ transitive = false }
+    api(libs.jarjar.meta    ){ transitive = false }
 
-    implementation(libs.jopt.simple            ){ transitive = false }
-    implementation(libs.securemodules          ){ transitive = false }
-    implementation(libs.accesstransformers     ){ transitive = false }
-    implementation(libs.terminalconsoleappender){ transitive = false }
-    implementation(libs.jimfs                  ){ transitive = false }
-    implementation(libs.roimfs                 ){ transitive = false }
+    implementation(libs.jopt.simple       ){ transitive = false }
+    implementation(libs.securemodules     ){ transitive = false }
+    implementation(libs.accesstransformers){ transitive = false }
+    implementation(libs.terminal          ){ transitive = false }
+    implementation(libs.jimfs             ){ transitive = false }
+    implementation(libs.roimfs            ){ transitive = false }
 
     // Needed because we have a custom log4j plugin, and they removed package scanning and require a data file to be generated
     implementation(libs.log4j.core        ){ transitive = false }
