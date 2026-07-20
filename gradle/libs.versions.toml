@@ -5,7 +5,7 @@ jline = "3.25.1"
 night-config = "3.7.4"
 jarjar = "0.4.2"
 log4j = "2.24.3"
-lwjgl = "3.4.1"
+lwjgl = "3.4.2"
 eventbus = "7.0.1"
 mixinextras = "0.5.3"
 
