@@ -1,6 +1,5 @@
 {
     "baseBranchPatterns": [
-        "26.2",
-        "1.20.x"
+        "26.2"
     ]
 }
