@@ -37,7 +37,7 @@ eventbus           = { module = "net.minecraftforge:eventbus",           version
 eventbus-validator = { module = "net.minecraftforge:eventbus-validator", version.ref = "eventbus" }
 mergetool-api      = { module = "net.minecraftforge:mergetool-api",      version = "1.0" }
 roimfs             = { module = "net.minecraftforge:roimfs",             version = "1.0.0" } # ReadOnlyInMemoryFileSystem - Used for JarInJar extraction at runtime
-jimfs              = { module = "com.google.jimfs:jimfs",                version = "1.3.0" } # Google's InMemory File System. Used by ForgeDev Tests, not shipped to production
+jimfs              = { module = "com.google.jimfs:jimfs",                version = "1.3.1" } # Google's InMemory File System. Used by ForgeDev Tests, not shipped to production
 maven-artifact     = { module = "org.apache.maven:maven-artifact",       version = "3.8.8" }
 # Mixin related stuff
 mixin              = { module = "org.spongepowered:mixin", version = "0.8.7" }
