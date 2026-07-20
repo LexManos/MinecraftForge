@@ -1,5 +1,11 @@
 {
-    "baseBranchPatterns": [
-        "26.2"
-    ]
+  "baseBranchPatterns": [
+    "26.2"
+  ]
+  "packageRules": [
+    {
+      "matchManagers": ["gradle-wrapper"],
+      "enabled": false
+    }
+  ]
 }
