@@ -1,0 +1,6 @@
+{
+    "baseBranchPatterns": [
+        "26.2",
+        "1.20.x"
+    ]
+}
