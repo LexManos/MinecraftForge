@@ -1,7 +1,7 @@
 {
   "baseBranchPatterns": [
     "26.2"
-  ]
+  ],
   "packageRules": [
     {
       "matchManagers": ["gradle-wrapper"],
