@@ -7,7 +7,7 @@ jarjar = "0.4.2"
 log4j = "2.24.3"
 lwjgl = "3.4.1"
 eventbus = "7.0.1"
-mixinextras = "0.5.3"
+mixinextras = "0.5.4"
 
 [plugins]
 licenser    = { id = "net.minecraftforge.licenser",        version = "1.2.0"  }
