@@ -1,5 +1,5 @@
 [versions]
-bootstrap = "2.1.8"
+bootstrap = "2.2.1"
 asm = "9.9.1"
 jline = "3.25.1"
 night-config = "3.7.4"
