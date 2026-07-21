@@ -1,0 +1,6 @@
+[libraries]
+binarypatcher  = { group = "net.minecraftforge", name = "binarypatcher",         version = "1.3.4" }
+installer      = { group = "net.minecraftforge", name = "installer",             version = "2.2.+" }
+installertools = { group = "net.minecraftforge", name = "installertools",        version = "1.4.5" }
+renamer        = { group = "net.minecraftforge", name = "ForgeAutoRenamingTool", version = "1.0.6" }
+srg2source     = { group = "net.minecraftforge", name = "Srg2Source",            version = "8.2.0" }

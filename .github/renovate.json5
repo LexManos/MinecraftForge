@@ -1,0 +1,53 @@
+{
+  "baseBranchPatterns": [
+    "26.2"
+  ],
+  "extends": [
+    "config:recommended"
+  ],
+  "additionalBranchPrefix": "{{baseBranch}}/",
+  "dependencyDashboardApproval": true, 
+  
+  // These libraries come from the version manifest, and as such we don't want to update their versions
+  "ignoreDeps": [
+    "com.google.code.gson:gson",
+    "com.google.guava:guava",
+    "com.google.guava:failureaccess",
+    "org.apache.commons:commons-lang3",
+    "net.sf.jopt-simple:jopt-simple",
+    "commons-io:commons-io",
+    "org.slf4j:slf4j-api",
+    "org.slf4j:slf4j-jdk14",
+    "org.apache.logging.log4j:log4j-api",
+    "org.apache.logging.log4j:log4j-core",
+    "com.mojang:logging",
+    "org.lwjgl:lwjgl",
+    "org.lwjgl:lwjgl-glfw",
+    "org.lwjgl:lwjgl-opengl",
+    "org.lwjgl:lwjgl-stb",
+    "org.lwjgl:lwjgl-tinyfd"
+  ],
+  
+  "packageRules": [
+    {
+      "matchManagers": ["gradle-wrapper", "github-actions"],
+      "enabled": false
+    },
+    {
+      "matchManagers": [ "gradle" ],
+      "registryUrls": [
+        "https://maven.minecraftforge.net/",
+        "https://repo.maven.apache.org/maven2/",
+        "https://plugins.gradle.org/m2/"
+      ]
+    },
+    {
+      // Bypass dashboard approval for any of our projects
+      "matchPackageNames": [
+        "/^net\\.minecraftforge:[a-zA-Z-]+/",
+        "bootstrap"
+      ],
+      "dependencyDashboardApproval": false
+    }
+  ]
+}

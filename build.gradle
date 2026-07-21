@@ -157,9 +157,9 @@ dependencies {
     installer libs.coremods.api
     installer libs.modlauncher
     installer libs.mergetool.api
-    installer libs.bundles.night.config
+    installer libs.bundles.config
     installer libs.maven.artifact
-    installer libs.bundles.terminalconsoleappender
+    installer libs.bundles.terminal
     installer libs.mixin
     installer libs.mixinextras.forge
     installer libs.bundles.jarjar

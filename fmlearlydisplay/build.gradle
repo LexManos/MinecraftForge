@@ -47,17 +47,17 @@ dependencies {
     implementation projects.fmlloader
     implementation projects.fmlcore
     implementation libs.bundles.lwjgl
-    implementation earlyDisplayLibs.slf4j.api
+    implementation libs.slf4j.api
     implementation libs.jopt.simple
 }
 
 // See gradle/gradle#35070 (https://github.com/gradle/gradle/issues/35070)
 // We are making the list of providers first BEFORE mapping them to a provider of the resolved objects so that they can be finalized after configuration.
 var lwjglTestLibs = [
-        dependencies.variantOf(earlyDisplayTestLibs.lwjgl) { classifier lwjglNatives },
-        dependencies.variantOf(earlyDisplayTestLibs.lwjgl.glfw) { classifier lwjglNatives },
-        dependencies.variantOf(earlyDisplayTestLibs.lwjgl.opengl) { classifier lwjglNatives },
-        dependencies.variantOf(earlyDisplayTestLibs.lwjgl.stb) { classifier lwjglNatives }
+    dependencies.variantOf(libs.lwjgl)        { classifier lwjglNatives },
+    dependencies.variantOf(libs.lwjgl.glfw)   { classifier lwjglNatives },
+    dependencies.variantOf(libs.lwjgl.opengl) { classifier lwjglNatives },
+    dependencies.variantOf(libs.lwjgl.stb)    { classifier lwjglNatives }
 ].with { list ->
     provider { list.collect { it.get() } }
 }
@@ -66,8 +66,8 @@ testing.suites.named('test', JvmTestSuite) {
     useJUnitJupiter('5.8.2')
 
     dependencies {
-        implementation earlyDisplayTestLibs.powermock.core
-        runtimeOnly earlyDisplayLibs.slf4j.jdk14
+        implementation testLibs.powermock
+        runtimeOnly libs.slf4j.jdk14
         runtimeOnly.bundle lwjglTestLibs
     }
 }

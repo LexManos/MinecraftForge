@@ -1,0 +1,4 @@
+# Libraries only used by our tests, not shipped to runtime
+
+[libraries]
+powermock = { module = "org.powermock:powermock-core", version = "2.0.9" }
