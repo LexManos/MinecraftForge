@@ -33,7 +33,7 @@ modlauncher        = { module = "net.minecraftforge:modlauncher",        version
 securemodules      = { module = "net.minecraftforge:securemodules",      version = "2.2.24" } # Needs unsafe
 unsafe             = { module = "net.minecraftforge:unsafe",             version = "0.9.2" }
 accesstransformers = { module = "net.minecraftforge:accesstransformers", version = "8.2.2" }
-coremods-api       = { module = "net.minecraftforge:coremods-api",       version = "5.3.0" }
+coremods-api       = { module = "net.minecraftforge:coremods-api",       version = "5.3.1" }
 eventbus           = { module = "net.minecraftforge:eventbus",           version.ref = "eventbus" }
 eventbus-validator = { module = "net.minecraftforge:eventbus-validator", version.ref = "eventbus" }
 mergetool-api      = { module = "net.minecraftforge:mergetool-api",      version = "1.0" }
