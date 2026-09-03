@@ -6,7 +6,7 @@ night-config = "3.7.4"
 jarjar = "0.4.2"
 log4j = "2.24.3"
 lwjgl = "3.4.1"
-eventbus = "7.0.1"
+eventbus = "7.0.6"
 mixinextras = "0.5.3"
 slf4j = "2.0.17"
 
