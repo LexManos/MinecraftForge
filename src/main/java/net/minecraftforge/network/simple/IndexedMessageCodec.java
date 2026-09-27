@@ -18,6 +18,8 @@ import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.MarkerManager;
 
+import io.netty.util.IllegalReferenceCountException;
+
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
@@ -102,17 +104,29 @@ public class IndexedMessageCodec
         }
     }
 
-    private static <M> void tryDecode(FriendlyByteBuf payload, Supplier<NetworkEvent.Context> context, int payloadIndex, MessageHandler<M> codec)
-    {
-        codec.decoder.map(d->d.apply(payload)).
-                map(p->{
-                    // Only run the loginIndex function for payloadIndexed packets (login)
-                    if (payloadIndex != Integer.MIN_VALUE)
-                    {
-                        codec.getLoginIndexSetter().ifPresent(f-> f.accept(p, payloadIndex));
-                    }
-                    return p;
-                }).ifPresent(m->codec.messageConsumer.accept(m, context));
+    private static <M> void tryDecode(FriendlyByteBuf payload, Supplier<NetworkEvent.Context> context, int payloadIndex, MessageHandler<M> codec) {
+        var decoder = codec.decoder.orElse(null);
+        if (decoder == null)
+            return;
+
+        var msg = decoder.apply(payload);
+        // Only run the loginIndex function for payloadIndexed packets (login)
+        if (payloadIndex != Integer.MIN_VALUE)
+            codec.getLoginIndexSetter().ifPresent(f-> f.accept(msg, payloadIndex));
+
+        codec.messageConsumer.accept(msg, context);
+        // Release the packet buffer, which can be part of the Pooled netty buffer.
+        // We must do this on the main thread in case our consumer is also on the main thread, and their decoder function keeps a reference to the buffer.
+        // See https://github.com/MinecraftForge/MinecraftForge/issues/10861
+        context.get().enqueueWork(() -> {
+            if (payload.refCnt() > 0) {
+                try {
+                    payload.release();
+                } catch (IllegalReferenceCountException e) {
+                    // Eat the exception without crashing the game, just in case there is another thread that decremented the count after we checked.
+                }
+            }
+        });
     }
 
     private static <M> int tryEncode(FriendlyByteBuf target, M message, MessageHandler<M> codec) {
